@@ -273,7 +273,7 @@ export async function render(el) {
   box(0.3, 0.3, 6.3, COL.metal, -6.6, 7.2, 0, stage); box(0.3, 0.3, 6.3, COL.metal, 6.6, 7.2, 0, stage);
   // banner
   const banner = new THREE.Mesh(new THREE.BoxGeometry(7, 1, 0.1), [M('#c96f1c'), M('#c96f1c'), M('#c96f1c'), M('#c96f1c'),
-    new THREE.MeshStandardMaterial({ map: textTex('MERIT FEST ♪', '#e8913a', '#fff', '700 72px Prompt', 768, 110) }), M('#c96f1c')]);
+  new THREE.MeshStandardMaterial({ map: textTex('MERIT FEST ♪', '#e8913a', '#fff', '700 72px Prompt', 768, 110) }), M('#c96f1c')]);
   banner.position.set(0, 6.4, 3); stage.add(banner); disposables.push(banner.geometry);
   // speakers
   for (const x of [-5.4, 5.4]) { box(1.1, 1.8, 1, COL.dark, x, 1.1, 1.8, stage); cyl(0.3, 0.3, 0.05, '#555', x, 2.1, 2.31, stage).rotation.x = Math.PI / 2; }
@@ -388,7 +388,7 @@ export async function render(el) {
   const arch = new THREE.Group(); arch.position.set(0, 0, 21); world.add(arch);
   for (const x of [-2.6, 2.6]) { box(0.8, 4.4, 0.8, COL.white, x, 0, 0, arch); box(1, 0.3, 1, COL.gold, x, 4.4, 0, arch); }
   const archSign = new THREE.Mesh(new THREE.BoxGeometry(6.6, 1.1, 0.4), [M(COL.roof1), M(COL.roof1), M(COL.gold), M(COL.roof1),
-    new THREE.MeshStandardMaterial({ map: textTex('MERIT FEST · งานบวช & ดนตรี', '#c8442f', '#ffe7a8', '600 46px Prompt', 768, 128) }), M(COL.roof1)]);
+  new THREE.MeshStandardMaterial({ map: textTex('MERIT FEST · งานบวช & ดนตรี', '#c8442f', '#ffe7a8', '600 46px Prompt', 768, 128) }), M(COL.roof1)]);
   archSign.position.set(0, 4.95, 0); archSign.castShadow = true; arch.add(archSign); disposables.push(archSign.geometry);
   const archRoof = add(prism(7.4, 1.1, 1.2, COL.roof2), arch); archRoof.position.y = 5.5;
 

@@ -3,6 +3,7 @@
  * Each page module exports `render(el, params)` and may return a cleanup fn.
  */
 import { $$ } from './ui.js';
+import './firebase.js';
 
 const routes = {
   home: () => import('./pages/home.js'),
