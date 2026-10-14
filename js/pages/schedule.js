@@ -1,0 +1,491 @@
+import { EVENT } from '../store.js';
+import { $, $$, toast, footer } from '../ui.js';
+
+/**
+ * Format ISO string to Google Calendar format: YYYYMMDDTHHMMSSZ
+ */
+function toGCalTime(iso) {
+  return new Date(iso).toISOString().replace(/-|:|\.\d{3}/g, '');
+}
+
+/**
+ * Generate Google Calendar URL for an event
+ */
+function makeGCalUrl(title, startISO, endISO, desc, loc) {
+  const p = new URLSearchParams({
+    action: 'TEMPLATE',
+    text: title,
+    dates: `${toGCalTime(startISO)}/${toGCalTime(endISO)}`,
+    details: desc,
+    location: loc,
+  });
+  return `https://calendar.google.com/calendar/render?${p.toString()}`;
+}
+
+/**
+ * Generate and download RFC 5545 iCalendar (.ics) file
+ */
+function downloadIcs(filename, events) {
+  const now = toGCalTime(new Date().toISOString());
+  const vEvents = events.map((ev, i) => `BEGIN:VEVENT
+UID:mf-${ev.id || i}-${Date.now()}@meritfest.local
+DTSTAMP:${now}
+DTSTART:${toGCalTime(ev.startTimeISO)}
+DTEND:${toGCalTime(ev.endTimeISO)}
+SUMMARY:${ev.title} - งานอุปสมบท ${EVENT.candidateName} (${EVENT.candidateNickname})
+DESCRIPTION:${ev.desc.replace(/\n/g, '\\n')} ณ ${ev.location}
+LOCATION:${ev.location}
+STATUS:CONFIRMED
+END:VEVENT`).join('\r\n');
+
+  const ics = [
+    'BEGIN:VCALENDAR',
+    'VERSION:2.0',
+    'PRODID:-//MERIT FEST//Ordination Ceremony//TH',
+    'CALSCALE:GREGORIAN',
+    'METHOD:PUBLISH',
+    vEvents,
+    'END:VCALENDAR',
+  ].join('\r\n');
+
+  const blob = new Blob([ics], { type: 'text/calendar;charset=utf-8' });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = filename;
+  document.body.appendChild(a);
+  a.click();
+  a.remove();
+  URL.revokeObjectURL(url);
+}
+
+export async function render(el) {
+  const sched = EVENT.scheduleList || [];
+  const blessingKey = 'mf.blessings.count.v1';
+  let blessingCount = Number(localStorage.getItem(blessingKey) || '128');
+
+  // Full day Google Calendar link
+  const fullDayGCalUrl = makeGCalUrl(
+    `งานอุปสมบท ${EVENT.candidateName} (${EVENT.candidateNickname})`,
+    EVENT.date,
+    EVENT.dateEnd,
+    `ขอกราบลาอุปสมบท ${EVENT.fullNameTh}\nกำหนดการ:\n${sched.map(s => `${s.timeLabel} ${s.title}`).join('\n')}\nสถานที่: ${EVENT.venue}`,
+    EVENT.venue
+  );
+
+  el.innerHTML = `
+    <section class="page container sched-page">
+      <!-- Auspicious Header -->
+      <div class="sched-hero glass card">
+        <div class="sched-hero-decor">
+          <span class="sched-emblem">☸</span>
+          <span class="sched-pill">ขอกราบลาอุปสมบท</span>
+        </div>
+
+        <h1 class="sched-title">
+          กำหนดการพิธีอุปสมบท
+        </h1>
+
+        <div class="sched-candidate">
+          <div class="candidate-avatar">
+            <span class="candidate-lotus">🪷</span>
+          </div>
+          <div class="candidate-info">
+            <h2 class="candidate-name">${EVENT.candidateName}</h2>
+            <span class="candidate-badge">มังกร</span>
+          </div>
+        </div>
+
+        <div class="sched-meta-chips">
+          <div class="chip date-chip">
+            <span class="chip-num">22</span>
+            <div>
+              <strong>วันอาทิตย์ที่ 22 พฤศจิกายน 2569</strong>
+              <small>วันมงคลฤกษ์</small>
+            </div>
+          </div>
+          <a href="${EVENT.googleMapsUrl}" target="_blank" rel="noopener" class="chip place-chip" title="เปิดแผนที่นำทาง Google Maps">
+            <span class="chip-ico">📍</span>
+            <div>
+              <strong>${EVENT.templeName}</strong>
+              <small>${EVENT.subdistrict} ${EVENT.district} ${EVENT.province}</small>
+            </div>
+            <span class="chip-arrow">↗</span>
+          </a>
+        </div>
+
+        <!-- Countdown Bar -->
+        <div class="sched-countdown-wrap">
+          <div class="countdown-head">
+            <span class="countdown-badge">
+              <span class="dot live"></span> นับถอยหลังสู่วันงานมงคล
+            </span>
+            <span class="countdown-target" id="sched-live-status">รอเริ่มพิธี</span>
+          </div>
+          <div class="countdown sched-countdown" id="sched-countdown">
+            ${['วัน', 'ชั่วโมง', 'นาที', 'วินาที'].map((l, i) => `
+              <div class="unit">
+                <div class="num" data-i="${i}">--</div>
+                <div class="lbl">${l}</div>
+              </div>`).join('')}
+          </div>
+        </div>
+
+        <!-- Quick Action Buttons -->
+        <div class="sched-actions">
+          <a href="${fullDayGCalUrl}" target="_blank" rel="noopener" class="btn btn-primary" id="btn-add-gcal">
+            📅 บันทึก Google Calendar
+          </a>
+          <button class="btn" id="btn-download-ics">
+            📥 ดาวน์โหลดปฏิทิน (.ics)
+          </button>
+          <button class="btn btn-ghost" id="btn-view-card">
+            🖼️ ดูการ์ดเชิญฉบับเต็ม
+          </button>
+          <a href="${EVENT.googleMapsUrl}" target="_blank" rel="noopener" class="btn btn-ghost" id="btn-nav-map">
+            🧭 นำทาง Google Maps
+          </a>
+        </div>
+      </div>
+
+      <!-- Invitation Card & Host Section -->
+      <div class="section">
+        <div class="sched-card-grid">
+          <!-- Card Image Frame -->
+          <div class="card card-invitation-showcase">
+            <div class="invitation-img-wrap" id="invitation-trigger">
+              <img src="${EVENT.invitationCardImg}" alt="การ์ดเชิญงานอุปสมบท ธนกร วงศ์คำภู (มังกร) 22 พ.ย. 2569" class="invitation-thumb" />
+              <div class="invitation-overlay">
+                <span>🔍 แตะเพื่อดูการ์ดขยายเต็มจอ</span>
+              </div>
+            </div>
+            <div class="invitation-card-foot">
+              <div>
+                <strong>การ์ดเชิญฉบับสมบูรณ์</strong>
+                <p>สามารถแตะขยาย หรือบันทึกภาพเก็บไว้เป็นที่ระลึก</p>
+              </div>
+              <div class="invitation-btn-group">
+                <button class="btn btn-sm btn-primary" id="btn-zoom-card">ขยายดูภาพ</button>
+                <a href="${EVENT.invitationCardImg}" download="การ์ดเชิญอุปสมบท-ธนกร-วงศ์คำภู.jpg" class="btn btn-sm">บันทึกรูป</a>
+              </div>
+            </div>
+          </div>
+
+          <!-- Hosts & Forgiveness Details -->
+          <div class="card card-hosts glass">
+            <div class="hosts-header">
+              <span class="gold-seal">📜</span>
+              <div>
+                <span class="eyebrow" style="color:var(--gold);">เจ้าภาพ & คำขอขมา</span>
+                <h3>รายนามเจ้าภาพ</h3>
+              </div>
+            </div>
+
+            <div class="hosts-list">
+              ${EVENT.hosts.map(h => `
+                <div class="host-item">
+                  <div class="host-role">${h.relation}</div>
+                  <div class="host-name">${h.name}</div>
+                </div>
+              `).join('')}
+            </div>
+
+            <p class="host-invitation-phrase">
+              "${EVENT.hostInvitationText}"
+            </p>
+
+            <div class="forgiveness-box">
+              <div class="fg-title">🙏 บทกราบขอขมาและอโหสิกรรม</div>
+              <p class="fg-quote">
+                "${EVENT.forgivenessText}"
+              </p>
+              <div class="fg-apology">${EVENT.apologyText}</div>
+            </div>
+
+            <div class="blessing-interactive">
+              <div class="blessing-count">
+                <span class="count-num" id="blessing-num">${blessingCount.toLocaleString('th-TH')}</span>
+                <span class="count-label">คนร่วมอนุโมทนาสาธุแล้ว</span>
+              </div>
+              <button class="btn btn-rose btn-bless" id="btn-bless">
+                🙏 ร่วมอนุโมทนา สาธุ
+              </button>
+            </div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Master Timeline Section -->
+      <div class="section">
+        <div class="section-head">
+          <span class="eyebrow">Agenda</span>
+          <h2>กำหนดการและลำดับพิธีการ</h2>
+          <p style="color:var(--cocoa-2)">วันอาทิตย์ที่ 22 พฤศจิกายน 2569 ณ พัทธสีมา วัดลานคา</p>
+
+          <!-- Filter Tabs -->
+          <div class="sched-filter-tabs">
+            <button class="filter-tab active" data-filter="all">ทั้งหมด (5)</button>
+            <button class="filter-tab" data-filter="morning">ช่วงเช้า (2)</button>
+            <button class="filter-tab" data-filter="afternoon">ช่วงบ่าย (3)</button>
+          </div>
+        </div>
+
+        <div class="timeline" id="sched-timeline">
+          ${sched.map((item, idx) => {
+            const itemGCal = makeGCalUrl(
+              `${item.title} - งานอุปสมบท ${EVENT.candidateName}`,
+              item.startTimeISO,
+              item.endTimeISO,
+              `${item.desc}\nสถานที่: ${item.location}`,
+              item.location
+            );
+
+            return `
+              <div class="timeline-item ${item.phase}" data-phase="${item.phase}" data-start="${item.startTimeISO}" data-end="${item.endTimeISO}" id="item-${item.id}">
+                <div class="tl-left">
+                  <div class="tl-node">
+                    <span class="tl-node-ico">${item.icon}</span>
+                  </div>
+                  <div class="tl-time-badge">${item.time} น.</div>
+                </div>
+
+                <div class="tl-card card hover">
+                  <div class="tl-card-head">
+                    <div class="tl-time-wrap">
+                      <span class="tl-time-pill">${item.timeLabel}</span>
+                      <span class="tl-phase-pill ${item.phase}">${item.phaseLabel}</span>
+                      <span class="tl-badge-pill">${item.badge}</span>
+                    </div>
+                    <div class="tl-status-live" style="display:none;">
+                      <span class="dot live"></span> ขณะนี้กำลังดำเนินพิธี
+                    </div>
+                  </div>
+
+                  <h3 class="tl-title">${item.title}</h3>
+                  <p class="tl-desc">${item.desc}</p>
+
+                  <div class="tl-meta">
+                    <div class="tl-loc">
+                      <span>📍</span>
+                      <strong>${item.location}</strong>
+                    </div>
+                  </div>
+
+                  <div class="tl-card-actions">
+                    <a href="${itemGCal}" target="_blank" rel="noopener" class="btn btn-sm tl-btn-cal" title="เตือนความจำใน Google Calendar">
+                      📅 บันทึกช่วงเวลานี้
+                    </a>
+                    <a href="#/map" class="btn btn-sm btn-ghost tl-btn-map" title="ดูจุดจัดงานในแผนที่ 3D">
+                      🗺️ ดูแผนที่ 3D
+                    </a>
+                  </div>
+                </div>
+              </div>
+            `;
+          }).join('')}
+        </div>
+      </div>
+
+      <!-- Guest Guide & Important Information -->
+      <div class="section">
+        <div class="section-head">
+          <span class="eyebrow">Information</span>
+          <h2>ข้อแนะนำและข้อมูลสำหรับผู้ร่วมงาน</h2>
+        </div>
+
+        <div class="grid grid-3">
+          <div class="card info-card">
+            <div class="info-ico">👕</div>
+            <h3>การแต่งกาย (Dress Code)</h3>
+            <p>แนะนำสวมใส่ชุดสุภาพ โทนสีขาว ครีม หรือสีสว่างสุภาพ เพื่อความสบายและเหมาะสมกับการร่วมพิธีในพัทธสีมา</p>
+          </div>
+
+          <div class="card info-card">
+            <div class="info-ico">🚗</div>
+            <h3>การเดินทาง & ที่จอดรถ</h3>
+            <p>วัดลานคา อ.บางปลาม้า จ.สุพรรณบุรี มีลานจอดรถกว้างขวางรองรับรถยนต์ได้จำนวนมาก พร้อมเจ้าหน้าที่คอยแนะนำ</p>
+            <a href="${EVENT.googleMapsUrl}" target="_blank" rel="noopener" style="color:var(--saffron-d);font-weight:600;font-size:14px;">เปิด Google Maps นำทาง →</a>
+          </div>
+
+          <div class="card info-card">
+            <div class="info-ico">🎫</div>
+            <h3>ตั๋ว QR ประจำตัว</h3>
+            <p>ลงทะเบียนรับ QR Ticket ล่วงหน้า เพื่อความสะดวกรวดเร็วในการเช็กอินหน้างาน และรับของที่ระลึกของงานบุญ</p>
+            <a href="#/register" style="color:var(--saffron-d);font-weight:600;font-size:14px;">ลงทะเบียนรับ QR ทันที →</a>
+          </div>
+        </div>
+      </div>
+
+      <!-- Lightbox Modal for Card -->
+      <div class="modal-lightbox" id="modal-card" aria-hidden="true">
+        <div class="modal-lightbox-backdrop" id="modal-backdrop"></div>
+        <div class="modal-lightbox-content">
+          <button class="modal-close" id="modal-close" aria-label="ปิดการ์ด">✕</button>
+          <img src="${EVENT.invitationCardImg}" alt="การ์ดเชิญอุปสมบท ธนกร วงศ์คำภู (มังกร)" class="modal-img" />
+          <div class="modal-toolbar">
+            <a href="${EVENT.invitationCardImg}" download="การ์ดเชิญอุปสมบท-ธนกร-วงศ์คำภู.jpg" class="btn btn-primary btn-sm">
+              💾 บันทึกรูปลงเครื่อง
+            </a>
+            <button class="btn btn-sm" id="btn-share-card">
+              🔗 แชร์การ์ดเชิญ
+            </button>
+          </div>
+        </div>
+      </div>
+    </section>
+    ${footer()}
+  `;
+
+  // Countdown logic
+  const targetTime = new Date(EVENT.date).getTime();
+  const nums = el.querySelectorAll('#sched-countdown .num');
+  const liveStatus = el.querySelector('#sched-live-status');
+
+  const updateCountdown = () => {
+    const now = Date.now();
+    let diff = targetTime - now;
+
+    if (diff > 0) {
+      const parts = [86400000, 3600000, 60000, 1000].map(unit => {
+        const val = Math.floor(diff / unit);
+        diff -= val * unit;
+        return val;
+      });
+      nums.forEach((n, i) => (n.textContent = String(parts[i]).padStart(2, '0')));
+      if (liveStatus) liveStatus.textContent = 'รอเริ่มพิธี';
+    } else {
+      nums.forEach(n => (n.textContent = '00'));
+      // Check current ritual
+      const current = sched.find(item => {
+        const s = new Date(item.startTimeISO).getTime();
+        const e = new Date(item.endTimeISO).getTime();
+        return now >= s && now <= e;
+      });
+      if (current) {
+        if (liveStatus) liveStatus.textContent = `กำลังดำเนิน: ${current.title}`;
+        const activeItem = el.querySelector(`#item-${current.id}`);
+        if (activeItem) {
+          activeItem.classList.add('live-active');
+          const liveBadge = activeItem.querySelector('.tl-status-live');
+          if (liveBadge) liveBadge.style.display = 'inline-flex';
+        }
+      } else {
+        if (liveStatus) liveStatus.textContent = 'วันงานมงคลอุปสมบท';
+      }
+    }
+  };
+
+  updateCountdown();
+  const timer = setInterval(updateCountdown, 1000);
+
+  // Filter Tabs
+  const tabs = el.querySelectorAll('.filter-tab');
+  const tlItems = el.querySelectorAll('.timeline-item');
+  tabs.forEach(tab => {
+    tab.addEventListener('click', () => {
+      tabs.forEach(t => t.classList.remove('active'));
+      tab.classList.add('active');
+      const filter = tab.dataset.filter;
+      tlItems.forEach(item => {
+        if (filter === 'all' || item.dataset.phase === filter) {
+          item.style.display = 'grid';
+        } else {
+          item.style.display = 'none';
+        }
+      });
+    });
+  });
+
+  // Modal Lightbox controls
+  const modal = el.querySelector('#modal-card');
+  const openModal = () => {
+    modal.classList.add('open');
+    modal.setAttribute('aria-hidden', 'false');
+    document.body.style.overflow = 'hidden';
+  };
+  const closeModal = () => {
+    modal.classList.remove('open');
+    modal.setAttribute('aria-hidden', 'true');
+    document.body.style.overflow = '';
+  };
+
+  el.querySelector('#btn-view-card')?.addEventListener('click', openModal);
+  el.querySelector('#btn-zoom-card')?.addEventListener('click', openModal);
+  el.querySelector('#invitation-trigger')?.addEventListener('click', openModal);
+  el.querySelector('#modal-close')?.addEventListener('click', closeModal);
+  el.querySelector('#modal-backdrop')?.addEventListener('click', closeModal);
+
+  // Keydown Escape to close modal
+  const handleKey = (e) => {
+    if (e.key === 'Escape' && modal.classList.contains('open')) {
+      closeModal();
+    }
+  };
+  window.addEventListener('keydown', handleKey);
+
+  // Download whole calendar ICS
+  el.querySelector('#btn-download-ics')?.addEventListener('click', () => {
+    downloadIcs(`งานอุปสมบท-${EVENT.candidateNickname}-22พย2569.ics`, sched);
+    toast('ดาวน์โหลดไฟล์ปฏิทิน (.ics) เรียบร้อยแล้ว', 'ok');
+  });
+
+  // Share card button
+  el.querySelector('#btn-share-card')?.addEventListener('click', async () => {
+    const shareData = {
+      title: `งานอุปสมบท ${EVENT.candidateName} (มังกร)`,
+      text: `ขอเรียนเชิญร่วมงานอุปสมบท ${EVENT.candidateName} (นาคมังกร) วันอาทิตย์ที่ 22 พฤศจิกายน 2569 ณ วัดลานคา จ.สุพรรณบุรี`,
+      url: window.location.href,
+    };
+    if (navigator.share) {
+      try {
+        await navigator.share(shareData);
+      } catch (err) {
+        if (err.name !== 'AbortError') copyLink();
+      }
+    } else {
+      copyLink();
+    }
+  });
+
+  function copyLink() {
+    navigator.clipboard?.writeText(window.location.href).then(() => {
+      toast('คัดลอกลิงก์กำหนดการเรียบร้อยแล้ว', 'ok');
+    }).catch(() => {
+      toast('ลิงก์: ' + window.location.href);
+    });
+  }
+
+  // Interactive Blessings ("อนุโมทนา สาธุ")
+  const blessBtn = el.querySelector('#btn-bless');
+  const blessNum = el.querySelector('#blessing-num');
+
+  blessBtn?.addEventListener('click', (e) => {
+    blessingCount++;
+    localStorage.setItem(blessingKey, String(blessingCount));
+    blessNum.textContent = blessingCount.toLocaleString('th-TH');
+
+    toast('🙏 ขออนุโมทนาบุญด้วยครับ สาธุ สาธุ สาธุ', 'ok');
+
+    // Spawn floating blessing particles
+    const rect = blessBtn.getBoundingClientRect();
+    const emojis = ['🪷', '💛', '✨', '🙏', '🪷', '🤍'];
+    for (let i = 0; i < 7; i++) {
+      const p = document.createElement('div');
+      p.className = 'blessing-particle';
+      p.textContent = emojis[Math.floor(Math.random() * emojis.length)];
+      p.style.left = `${rect.left + rect.width / 2 + (Math.random() * 60 - 30)}px`;
+      p.style.top = `${rect.top + (Math.random() * 20 - 10)}px`;
+      p.style.setProperty('--dx', `${(Math.random() - 0.5) * 120}px`);
+      p.style.setProperty('--dy', `-${100 + Math.random() * 120}px`);
+      p.style.setProperty('--rot', `${(Math.random() - 0.5) * 60}deg`);
+      document.body.appendChild(p);
+      setTimeout(() => p.remove(), 1600);
+    }
+  });
+
+  return () => {
+    clearInterval(timer);
+    window.removeEventListener('keydown', handleKey);
+    document.body.style.overflow = '';
+  };
+}
