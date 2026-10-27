@@ -257,11 +257,11 @@ p { margin: 0 0 1em; line-height: 1.7; }
 .map-hud > * { pointer-events: auto; }
 
 .hud-card {
-  max-width: 580px;
-  border-radius: 20px;
+  width: fit-content;
+  max-width: min(580px, calc(100vw - 28px));
+  border-radius: 18px;
   box-shadow: 0 10px 30px rgba(74, 52, 40, 0.12);
   border: 1px solid rgba(255, 255, 255, 0.7);
-  transition: all 0.35s cubic-bezier(0.2, 0.8, 0.2, 1);
   overflow: hidden;
 }
 
@@ -269,13 +269,7 @@ p { margin: 0 0 1em; line-height: 1.7; }
   display: flex;
   align-items: center;
   gap: 12px;
-  padding: 12px 16px;
-  cursor: pointer;
-  user-select: none;
-  transition: background .2s ease;
-}
-.hud-head:hover {
-  background: rgba(255, 255, 255, 0.25);
+  padding: 10px 16px;
 }
 .hud-head .logo {
   width: 42px;
@@ -300,7 +294,7 @@ p { margin: 0 0 1em; line-height: 1.7; }
   justify-content: space-between;
 }
 .hud-head h1 {
-  font-size: 16px;
+  font-size: 15.5px;
   margin: 0;
   font-weight: 700;
   color: var(--cocoa);
@@ -321,21 +315,12 @@ p { margin: 0 0 1em; line-height: 1.7; }
   padding: 2px 8px;
   border-radius: 999px;
 }
-.hud-venue {
-  font-size: 12px;
-  margin: 2px 0 0;
-  color: var(--cocoa-2);
-  white-space: nowrap;
-  overflow: hidden;
-  text-overflow: ellipsis;
-  line-height: 1.4;
-}
 
 .hud-mini-stats {
-  display: none;
+  display: flex;
   font-size: 12px;
   color: var(--cocoa-2);
-  margin-top: 2px;
+  margin-top: 3px;
   align-items: center;
   gap: 6px;
   white-space: nowrap;
@@ -348,118 +333,6 @@ p { margin: 0 0 1em; line-height: 1.7; }
 }
 .hud-mini-stats .sep {
   color: var(--muted);
-}
-
-.hud-toggle-btn {
-  border: 1px solid rgba(74, 52, 40, 0.12);
-  background: rgba(255, 255, 255, 0.7);
-  color: var(--cocoa);
-  border-radius: 999px;
-  padding: 6px 12px;
-  font-size: 12px;
-  font-weight: 600;
-  display: inline-flex;
-  align-items: center;
-  gap: 4px;
-  cursor: pointer;
-  flex: none;
-  transition: all 0.2s ease;
-  box-shadow: var(--shadow-sm);
-}
-.hud-toggle-btn:hover {
-  background: #fff;
-  color: var(--saffron-d);
-  border-color: var(--saffron);
-}
-.hud-toggle-icon {
-  font-size: 10px;
-  display: inline-block;
-  transition: transform 0.3s cubic-bezier(0.2, 0.8, 0.2, 1);
-}
-
-.hud-body {
-  border-top: 1px solid rgba(74, 52, 40, 0.08);
-  padding: 10px 16px 14px;
-  max-height: 220px;
-  opacity: 1;
-  transform-origin: top;
-  transition: max-height 0.35s cubic-bezier(0.2, 0.8, 0.2, 1),
-              opacity 0.25s ease,
-              padding 0.35s ease,
-              border-color 0.35s ease;
-}
-
-.hud-stats {
-  display: grid;
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-  gap: 10px;
-  max-width: 100%;
-}
-.hud-stat {
-  padding: 10px 14px;
-  border-radius: 14px;
-  background: rgba(255, 255, 255, 0.55);
-  border: 1px solid rgba(255, 255, 255, 0.85);
-  box-shadow: 0 2px 6px rgba(74, 52, 40, 0.04);
-}
-.hud-stat .k {
-  font-size: 12px;
-  color: var(--cocoa-2);
-  display: flex;
-  align-items: center;
-  gap: 5px;
-  font-weight: 500;
-}
-.hud-stat .stat-ico {
-  font-size: 13px;
-}
-.hud-stat .v {
-  font-size: 22px;
-  font-weight: 700;
-  font-variant-numeric: tabular-nums;
-  margin-top: 2px;
-  color: var(--cocoa);
-}
-.hud-stat .v small {
-  font-size: 12px;
-  font-weight: 400;
-  color: var(--muted);
-}
-.hud-stat .bar {
-  height: 5px;
-  border-radius: 99px;
-  background: var(--cream-2);
-  margin-top: 6px;
-  overflow: hidden;
-}
-.hud-stat .bar i {
-  display: block;
-  height: 100%;
-  background: linear-gradient(90deg, var(--leaf), #a8c98f);
-  border-radius: 99px;
-  transition: width 1s var(--ease);
-}
-
-/* Collapsed state */
-.hud-card.is-collapsed {
-  border-radius: 16px;
-}
-.hud-card.is-collapsed .hud-body {
-  max-height: 0;
-  opacity: 0;
-  padding-top: 0;
-  padding-bottom: 0;
-  border-top-color: transparent;
-  pointer-events: none;
-}
-.hud-card.is-collapsed .hud-venue {
-  display: none;
-}
-.hud-card.is-collapsed .hud-mini-stats {
-  display: flex;
-}
-.hud-card.is-collapsed .hud-toggle-icon {
-  transform: rotate(180deg);
 }
 .map-controls {
   position: absolute; right: 14px; top: 50%; transform: translateY(-50%); z-index: 5;
@@ -1077,14 +950,7 @@ p { margin: 0 0 1em; line-height: 1.7; }
   .hud-head .logo { width: 34px; height: 34px; font-size: 17px; border-radius: 10px; }
   .hud-head h1 { font-size: 13.5px; }
   .hud-head .clock { font-size: 11px; padding: 1px 6px; }
-  .hud-venue { font-size: 11px; }
-  .hud-mini-stats { font-size: 11px; }
-  .hud-toggle-btn { padding: 4px 8px; font-size: 11px; }
-  .hud-body { padding: 8px 10px 10px; }
-  .hud-stats { gap: 8px; }
-  .hud-stat { padding: 8px 10px; border-radius: 12px; }
-  .hud-stat .v { font-size: 18px; }
-  .hud-stat .k { font-size: 11px; }
+  .hud-mini-stats { font-size: 11px; gap: 5px; }
   .map-controls { right: 8px; padding: 4px; }
   .map-controls button { width: 36px; height: 36px; font-size: 15px; }
   .map-label { padding: 5px 10px; font-size: 12px; }

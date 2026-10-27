@@ -131,6 +131,7 @@ const KEY = {
   quotes: 'mf.quotes.v1',
   monk: 'mf.monkPhoto.v1',
   seq: 'mf.seq.v1',
+  visitors: 'mf.visitors.v1',
 };
 
 const DEFAULT_QUOTES = [
@@ -184,19 +185,47 @@ function audit(action, data = {}) {
   write(KEY.audit, log.slice(0, 500));
 }
 
+export function recordVisit() {
+  try {
+    const sessionKey = 'mf_session_counted';
+    if (!sessionStorage.getItem(sessionKey)) {
+      sessionStorage.setItem(sessionKey, '1');
+      const cur = Number(read(KEY.visitors, 0)) || 0;
+      const next = cur + 1;
+      write(KEY.visitors, next);
+      emit();
+      return next;
+    }
+  } catch { }
+  return getVisitorCount();
+}
+
+export function getVisitorCount() {
+  const v = Number(read(KEY.visitors, 0)) || 0;
+  if (v > 0) return v;
+  const regs = read(KEY.regs, []).filter(r => r.status !== 'cancelled');
+  return Math.max(1, regs.length);
+}
+
 function emit() {
   const stats = computeStats();
   listeners.forEach(fn => fn(stats));
   channel?.postMessage({ type: 'stats' });
 }
 channel && (channel.onmessage = () => { const s = computeStats(); listeners.forEach(fn => fn(s)); });
-window.addEventListener('storage', e => { if (e.key === KEY.regs) { const s = computeStats(); listeners.forEach(fn => fn(s)); } });
+window.addEventListener('storage', e => {
+  if (e.key === KEY.regs || e.key === KEY.visitors) {
+    const s = computeStats();
+    listeners.forEach(fn => fn(s));
+  }
+});
 
 function computeStats() {
   const regs = read(KEY.regs, []).filter(r => r.status !== 'cancelled');
   return {
     registered: regs.length,
     checkedIn: regs.filter(r => r.checkedInAt).length,
+    visitors: getVisitorCount(),
     target: EVENT.target,
   };
 }
@@ -320,10 +349,13 @@ export async function seedDemo(n = 40) {
     });
   }
   write(KEY.regs, regs);
+  const currentVisitors = Number(read(KEY.visitors, 0)) || 0;
+  write(KEY.visitors, currentVisitors + Math.floor(n * 1.5));
   audit('demo.seed', { n });
   emit();
 }
 export async function resetAll() {
   Object.values(KEY).forEach(k => localStorage.removeItem(k));
+  try { sessionStorage.removeItem('mf_session_counted'); } catch { }
   emit();
 }

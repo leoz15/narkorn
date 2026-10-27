@@ -4,6 +4,9 @@
  */
 import { $$ } from './ui.js';
 import './firebase.js';
+import { recordVisit } from './store.js';
+
+recordVisit();
 
 const routes = {
   home: () => import('./pages/home.js'),

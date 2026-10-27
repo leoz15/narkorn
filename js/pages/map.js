@@ -10,7 +10,7 @@
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { EVENT, getStats, onStats } from '../store.js';
+import { EVENT, getStats, onStats, recordVisit } from '../store.js';
 import { countUp, toast } from '../ui.js';
 import { NavGrid, createMe, ME_STATE } from './map-character.js';
 
@@ -69,37 +69,18 @@ export async function render(el) {
     <div class="map-labels" id="map-labels"></div>
 
     <div class="map-hud">
-      <div class="hud-card glass" id="hud-card">
-        <div class="hud-head" id="hud-header" role="button" tabindex="0" aria-expanded="true" title="แตะเพื่อหุบหรือขยายข้อมูล">
+      <div class="hud-card glass" id="hud-card" title="${EVENT.dateTh} · ${EVENT.venue}">
+        <div class="hud-head">
           <div class="logo">🛕</div>
           <div class="hud-head-main">
             <div class="hud-head-row">
               <h1>วัดลานคา · แผนที่งาน 3D</h1>
               <div class="clock"><span class="dot live" style="color:var(--leaf-d)"></span><span id="map-clock">--:--</span></div>
             </div>
-            <p class="hud-venue">${EVENT.dateTh} · ${EVENT.venue}</p>
             <div class="hud-mini-stats" id="hud-mini-stats">
-              <span>ลงทะเบียน <b><span id="hs-reg-mini">0</span></b> คน</span>
+              <span>จำนวนที่เข้ามาชม <b><span id="hs-visitors">0</span></b> คน</span>
               <span class="sep">•</span>
-              <span>เช็กอิน <b><span id="hs-chk-mini">0</span></b>/${EVENT.target}</span>
-            </div>
-          </div>
-          <button class="hud-toggle-btn" id="hud-toggle" aria-label="หุบหรือขยายข้อมูล" title="หุบหรือขยายข้อมูล">
-            <span class="hud-toggle-icon">▲</span>
-            <span class="hud-toggle-text">หุบ</span>
-          </button>
-        </div>
-
-        <div class="hud-body" id="hud-body">
-          <div class="hud-stats">
-            <div class="hud-stat">
-              <div class="k"><span class="stat-ico">📝</span> ลงทะเบียน</div>
-              <div class="v"><span id="hs-reg">0</span> <small>คน</small></div>
-            </div>
-            <div class="hud-stat">
-              <div class="k"><span class="stat-ico">✅</span> เช็กอินแล้ว</div>
-              <div class="v"><span id="hs-chk">0</span> <small>/ ${EVENT.target}</small></div>
-              <div class="bar"><i id="hs-bar" style="width:0%"></i></div>
+              <span>จำนวนเช็คอิน <b><span id="hs-chk">0</span></b> ครั้ง</span>
             </div>
           </div>
         </div>
@@ -976,67 +957,16 @@ export async function render(el) {
   const ro = new ResizeObserver(resize); ro.observe(container); resize();
 
   // ---------- Stats (from data service, not characters) ----------
+  recordVisit();
   const applyStats = s => {
-    const reg = el.querySelector('#hs-reg');
+    const visitors = el.querySelector('#hs-visitors');
     const chk = el.querySelector('#hs-chk');
-    const regMini = el.querySelector('#hs-reg-mini');
-    const chkMini = el.querySelector('#hs-chk-mini');
-    const bar = el.querySelector('#hs-bar');
 
-    if (reg) countUp(reg, s.registered);
-    if (chk) countUp(chk, s.checkedIn);
-    if (regMini) countUp(regMini, s.registered);
-    if (chkMini) countUp(chkMini, s.checkedIn);
-    if (bar) bar.style.width = Math.min(100, (s.checkedIn / s.target) * 100) + '%';
+    if (visitors) countUp(visitors, s.visitors || 0);
+    if (chk) countUp(chk, s.checkedIn || 0);
   };
   applyStats(await getStats());
   const offStats = onStats(applyStats);
-
-  // ---------- Collapsible HUD Card ----------
-  const hudCard = el.querySelector('#hud-card');
-  const hudToggle = el.querySelector('#hud-toggle');
-  const hudHeader = el.querySelector('#hud-header');
-
-  function toggleHud(forceState) {
-    if (!hudCard) return;
-    const isCollapsed = forceState !== undefined ? forceState : !hudCard.classList.contains('is-collapsed');
-    hudCard.classList.toggle('is-collapsed', isCollapsed);
-    if (hudHeader) {
-      hudHeader.setAttribute('aria-expanded', (!isCollapsed).toString());
-    }
-    if (hudToggle) {
-      const icon = hudToggle.querySelector('.hud-toggle-icon');
-      const text = hudToggle.querySelector('.hud-toggle-text');
-      if (icon) icon.textContent = isCollapsed ? '▼' : '▲';
-      if (text) text.textContent = isCollapsed ? 'ขยาย' : 'หุบ';
-      hudToggle.setAttribute('aria-expanded', (!isCollapsed).toString());
-    }
-    try {
-      sessionStorage.setItem('map_hud_collapsed', isCollapsed ? '1' : '0');
-    } catch { }
-  }
-
-  hudToggle?.addEventListener('click', (ev) => {
-    ev.stopPropagation();
-    toggleHud();
-  });
-
-  hudHeader?.addEventListener('click', (ev) => {
-    if (ev.target.closest('button, a')) return;
-    toggleHud();
-  });
-
-  hudHeader?.addEventListener('keydown', (ev) => {
-    if (ev.key === 'Enter' || ev.key === ' ') {
-      ev.preventDefault();
-      toggleHud();
-    }
-  });
-
-  // Restore saved collapse preference if exists
-  if (sessionStorage.getItem('map_hud_collapsed') === '1') {
-    toggleHud(true);
-  }
 
   const clockEl = el.querySelector('#map-clock');
   const clockTick = () => { clockEl.textContent = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }); };
