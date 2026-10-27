@@ -83,6 +83,7 @@ p { margin: 0 0 1em; line-height: 1.7; }
 }
 .nav a:hover { background: rgba(232, 145, 58, .1); color: var(--cocoa); }
 .nav a.active { background: var(--cocoa); color: var(--cream); }
+.ticket-btn.active { box-shadow: 0 0 0 3px rgba(232, 145, 58, .35), 0 8px 22px rgba(232, 145, 58, .45); }
 .menu-toggle { display: none; }
 
 /* ---------- Layout ---------- */
