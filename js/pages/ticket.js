@@ -80,57 +80,9 @@ export function bindTicketActions(root, t) {
   });
 }
 
-export async function render(el, params) {
-  el.innerHTML = `<section class="page container"><div style="text-align:center;padding:60px"><div class="spinner"></div>กำลังโหลดตั๋ว…</div></section>`;
-  let t = params.t ? await getByToken(params.t) : await getMyTicket();
-  if (t && params.t) saveMyTicket(t);
+import { render as checkinRender } from './checkin.js';
 
-  const paint = async () => {
-    if (!t) {
-      el.innerHTML = `
-      <section class="page container">
-        <div class="card" style="max-width:520px;margin:0 auto;text-align:center;padding:36px">
-          <div style="font-size:54px">🎫</div>
-          <h1 style="font-family:var(--hand);font-size:34px">ตั๋วของฉัน</h1>
-          <p style="color:var(--cocoa-2)">ยังไม่พบตั๋วบนอุปกรณ์นี้ ลงทะเบียนใหม่ หรือค้นหาด้วยเบอร์โทรที่เคยลงทะเบียนไว้</p>
-          <form id="find-form" style="text-align:left;margin-top:18px">
-            <div class="field"><label for="find-phone">เบอร์โทรศัพท์ที่ลงทะเบียน</label>
-              <input class="input" id="find-phone" type="tel" inputmode="numeric" placeholder="08x-xxx-xxxx" required /></div>
-            <button class="btn btn-dark btn-block" id="find-submit">🔍 ค้นหาตั๋ว</button>
-          </form>
-          <p style="margin:18px 0 0"><a href="#/register" class="btn btn-primary btn-block" id="go-register">📝 ลงทะเบียนใหม่</a></p>
-          <p style="font-size:12px;color:var(--muted);margin-top:14px">* เวอร์ชันจริงจะยืนยันตัวตนด้วย OTP ก่อนแสดงตั๋ว</p>
-        </div>
-      </section>${footer()}`;
-      el.querySelector('#find-form').addEventListener('submit', async e => {
-        e.preventDefault();
-        const r = await findByPhone(el.querySelector('#find-phone').value);
-        if (!r) return toast('ไม่พบข้อมูลการลงทะเบียน', 'err');
-        t = r; saveMyTicket(r); toast('พบตั๋วของคุณแล้ว', 'ok'); paint();
-      });
-      return;
-    }
-    el.innerHTML = `
-      <section class="page container">
-        ${await ticketCard(t)}
-        <div class="ticket-actions">
-          <button class="btn btn-rose" id="btn-save-ticket">⬇️ บันทึกตั๋วลงเครื่อง</button>
-          ${t.status === 'checked_in'
-            ? `<a href="#/polaroid" class="btn btn-primary" id="btn-go-polaroid">📸 สร้าง Polaroid</a>`
-            : `<a href="#/map" class="btn" id="btn-go-map">🗺️ ดูแผนที่งาน</a>`}
-        </div>
-        <p style="text-align:center;margin-top:18px"><button class="btn btn-ghost btn-sm" id="btn-forget">ไม่ใช่ตั๋วของฉัน / ออกจากอุปกรณ์นี้</button></p>
-      </section>${footer()}`;
-    bindTicketActions(el, t);
-    el.querySelector('#btn-forget').addEventListener('click', () => { clearMyTicket(); t = null; paint(); });
-  };
-  await paint();
-
-  // live update when staff checks this ticket in (cross-tab)
-  const off = onStats(async () => {
-    if (!t) return;
-    const fresh = await getByToken(t.token);
-    if (fresh && fresh.status !== t.status) { t = fresh; toast('เช็กอินสำเร็จ! ปลดล็อก Polaroid แล้ว 🎉', 'ok'); paint(); }
-  });
-  return off;
+export async function render(el, params = {}) {
+  return checkinRender(el, params);
 }
+

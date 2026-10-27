@@ -209,7 +209,7 @@ export async function render(el) {
             <div class="info-ico">🎫</div>
             <h3>ตั๋ว QR ประจำตัว</h3>
             <p>ลงทะเบียนรับ QR Ticket ล่วงหน้า เพื่อความสะดวกรวดเร็วในการเช็กอินหน้างาน และรับของที่ระลึกของงานบุญ</p>
-            <a href="#/register" style="color:var(--saffron-d);font-weight:600;font-size:14px;">ลงทะเบียนรับ QR ทันที →</a>
+            <a href="#/checkin" style="color:var(--saffron-d);font-weight:600;font-size:14px;">Checkin รับ QR ทันที →</a>
           </div>
         </div>
       </div>

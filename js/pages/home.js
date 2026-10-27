@@ -2,7 +2,7 @@ import { EVENT, getStats, onStats } from '../store.js';
 import { countUp, footer } from '../ui.js';
 
 const FEATURES = [
-  { ico: '📝', bg: '#fde7cf', title: 'ลงทะเบียน & QR Ticket', text: 'กรอกชื่อและเบอร์โทร รับ QR ประจำตัวทันที ใช้เช็กอินหน้างานได้เลย', href: '#/register', status: 'ok', label: 'พร้อมใช้งาน' },
+  { ico: '🎫', bg: '#fde7cf', title: 'Checkin & E-Ticket', text: 'ลงทะเบียนหรือค้นหาตั๋ว รับ QR ประจำตัวทันที ใช้เช็กอินหน้างานได้เลย', href: '#/checkin', status: 'ok', label: 'พร้อมใช้งาน' },
   { ico: '🗺️', bg: '#e3efd9', title: '3D Event Map', text: 'สำรวจโบสถ์ เวทีดนตรี และซุ้มอาหาร ในโลกจำลองแบบ Isometric', href: '#/map', status: 'ok', label: 'พร้อมใช้งาน' },
   { ico: '📸', bg: '#f9dcda', title: 'Digital Polaroid', text: 'ถ่ายรูปคู่กับภาพพระนวกะ พร้อมคำอวยพร แล้วบันทึกเก็บไว้เป็นความทรงจำ', href: '#/polaroid', status: 'ok', label: 'พร้อมใช้งาน' },
   { ico: '🗓️', bg: '#fef0d8', title: 'กำหนดการพิธีบวช', text: 'กำหนดการพิธีปลงผม เลี้ยงพระ เทศน์สอนนาค แห่นาค และพิธีอุปสมบท 22 พ.ย. 2569', href: '#/schedule', status: 'ok', label: 'พร้อมดูแล้ว' },
@@ -19,7 +19,7 @@ export async function render(el) {
         <div class="sub">MERIT FEST · ${EVENT.tagline}</div>
         <p class="lead">ร่วมเป็นส่วนหนึ่งของวันสำคัญ ลงทะเบียนล่วงหน้า สำรวจบรรยากาศงานผ่านแผนที่ 3D และเก็บความทรงจำด้วยภาพ Polaroid กับพระนวกะ</p>
         <div class="hero-cta">
-          <a href="#/register" class="btn btn-primary btn-lg" id="hero-register">📝 ลงทะเบียนรับ QR</a>
+          <a href="#/checkin" class="btn btn-primary btn-lg" id="hero-register">🎫 Checkin รับ QR</a>
           <a href="#/map" class="btn btn-lg" id="hero-map">🗺️ ดูแผนที่ 3D</a>
         </div>
         <div class="countdown" id="countdown">

@@ -10,8 +10,9 @@ recordVisit();
 
 const routes = {
   home: () => import('./pages/home.js'),
-  register: () => import('./pages/register.js'),
-  ticket: () => import('./pages/ticket.js'),
+  checkin: () => import('./pages/checkin.js'),
+  register: () => import('./pages/checkin.js'),
+  ticket: () => import('./pages/checkin.js'),
   map: () => import('./pages/map.js'),
   polaroid: () => import('./pages/polaroid.js'),
   staff: () => import('./pages/staff.js'),
@@ -37,8 +38,9 @@ async function navigate() {
   if (typeof cleanup === 'function') { try { cleanup(); } catch (e) { console.warn(e); } }
   cleanup = null;
 
-  $$('[data-route]').forEach(a => a.classList.toggle('active', a.dataset.route === name));
-  document.body.dataset.route = name;
+  const routeKey = (name === 'register' || name === 'ticket') ? 'checkin' : name;
+  $$('[data-route]').forEach(a => a.classList.toggle('active', a.dataset.route === routeKey));
+  document.body.dataset.route = routeKey;
   document.getElementById('main-nav')?.classList.remove('open');
 
   try {

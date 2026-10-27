@@ -218,6 +218,36 @@ p { margin: 0 0 1em; line-height: 1.7; }
 .steps p { margin: 0; color: var(--cocoa-2); font-size: 14px; }
 .steps strong { display: block; color: var(--cocoa); font-size: 15px; }
 
+/* Segmented switcher for Checkin */
+.checkin-tabs {
+  display: flex;
+  background: var(--cream-2);
+  padding: 4px;
+  border-radius: 999px;
+  margin-bottom: 20px;
+  border: 1px solid var(--line);
+  gap: 4px;
+}
+.checkin-tab {
+  flex: 1;
+  padding: 10px 14px;
+  border-radius: 999px;
+  border: none;
+  background: transparent;
+  color: var(--cocoa-2);
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  transition: all .2s;
+}
+.checkin-tab:hover { color: var(--cocoa); }
+.checkin-tab.active {
+  background: #fff;
+  color: var(--cocoa);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+
 /* ---------- Ticket ---------- */
 .ticket {
   max-width: 400px; margin: 0 auto; background: var(--paper); border-radius: 26px; overflow: hidden;
