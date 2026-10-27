@@ -413,7 +413,7 @@ export async function render(el) {
     // Right perimeter (curving gracefully around stage)
     [15, -18], [17, -9], [17, 1], [16, 10], [14, 18],
     // Front perimeter & entrance flanking
-    [9, 23], [-2, 23], [-10, 23], [-17, 23], [-6, 14], [6, 14], [-10, 12], [11, 13]
+    [9, 23], [-10, 23], [-17, 23], [-6, 14], [6, 14], [-10, 12], [11, 13]
   ];
   treeSpots.forEach(([x, z], i) => {
     if (i % 4 === 0) { // palm
