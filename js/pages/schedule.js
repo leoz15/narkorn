@@ -61,21 +61,10 @@ END:VEVENT`).join('\r\n');
 
 export async function render(el) {
   const sched = EVENT.scheduleList || [];
-  const blessingKey = 'mf.blessings.count.v1';
-  let blessingCount = Number(localStorage.getItem(blessingKey) || '128');
-
-  // Full day Google Calendar link
-  const fullDayGCalUrl = makeGCalUrl(
-    `งานอุปสมบท ${EVENT.candidateName} (${EVENT.candidateNickname})`,
-    EVENT.date,
-    EVENT.dateEnd,
-    `ขอกราบลาอุปสมบท ${EVENT.fullNameTh}\nกำหนดการ:\n${sched.map(s => `${s.timeLabel} ${s.title}`).join('\n')}\nสถานที่: ${EVENT.venue}`,
-    EVENT.venue
-  );
 
   el.innerHTML = `
     <section class="page container sched-page">
-      <!-- Auspicious Header -->
+      <!-- Auspicious Header & Invitation Card Showcase -->
       <div class="sched-hero glass card">
         <div class="sched-hero-decor">
           <span class="sched-emblem">☸</span>
@@ -85,34 +74,6 @@ export async function render(el) {
         <h1 class="sched-title">
           กำหนดการพิธีอุปสมบท
         </h1>
-
-        <div class="sched-candidate">
-          <div class="candidate-avatar">
-            <span class="candidate-lotus">🪷</span>
-          </div>
-          <div class="candidate-info">
-            <h2 class="candidate-name">${EVENT.candidateName}</h2>
-            <span class="candidate-badge">มังกร</span>
-          </div>
-        </div>
-
-        <div class="sched-meta-chips">
-          <div class="chip date-chip">
-            <span class="chip-num">22</span>
-            <div>
-              <strong>วันอาทิตย์ที่ 22 พฤศจิกายน 2569</strong>
-              <small>วันมงคลฤกษ์</small>
-            </div>
-          </div>
-          <a href="${EVENT.googleMapsUrl}" target="_blank" rel="noopener" class="chip place-chip" title="เปิดแผนที่นำทาง Google Maps">
-            <span class="chip-ico">📍</span>
-            <div>
-              <strong>${EVENT.templeName}</strong>
-              <small>${EVENT.subdistrict} ${EVENT.district} ${EVENT.province}</small>
-            </div>
-            <span class="chip-arrow">↗</span>
-          </a>
-        </div>
 
         <!-- Countdown Bar -->
         <div class="sched-countdown-wrap">
@@ -131,85 +92,22 @@ export async function render(el) {
           </div>
         </div>
 
-        <!-- Quick Action Buttons -->
-        <div class="sched-actions">
-          <a href="${fullDayGCalUrl}" target="_blank" rel="noopener" class="btn btn-primary" id="btn-add-gcal">
-            📅 บันทึก Google Calendar
-          </a>
-          <button class="btn" id="btn-download-ics">
-            📥 ดาวน์โหลดปฏิทิน (.ics)
-          </button>
-          <button class="btn btn-ghost" id="btn-view-card">
-            🖼️ ดูการ์ดเชิญฉบับเต็ม
-          </button>
-          <a href="${EVENT.googleMapsUrl}" target="_blank" rel="noopener" class="btn btn-ghost" id="btn-nav-map">
-            🧭 นำทาง Google Maps
-          </a>
-        </div>
-      </div>
-
-      <!-- Invitation Card & Host Section -->
-      <div class="section">
-        <div class="sched-card-grid">
-          <!-- Card Image Frame -->
-          <div class="card card-invitation-showcase">
-            <div class="invitation-img-wrap" id="invitation-trigger">
-              <img src="${EVENT.invitationCardImg}" alt="การ์ดเชิญงานอุปสมบท ธนกร วงศ์คำภู (มังกร) 22 พ.ย. 2569" class="invitation-thumb" />
-              <div class="invitation-overlay">
-                <span>🔍 แตะเพื่อดูการ์ดขยายเต็มจอ</span>
-              </div>
-            </div>
-            <div class="invitation-card-foot">
-              <div>
-                <strong>การ์ดเชิญฉบับสมบูรณ์</strong>
-                <p>สามารถแตะขยาย หรือบันทึกภาพเก็บไว้เป็นที่ระลึก</p>
-              </div>
-              <div class="invitation-btn-group">
-                <button class="btn btn-sm btn-primary" id="btn-zoom-card">ขยายดูภาพ</button>
-                <a href="${EVENT.invitationCardImg}" download="การ์ดเชิญอุปสมบท-ธนกร-วงศ์คำภู.jpg" class="btn btn-sm">บันทึกรูป</a>
-              </div>
+        <!-- Invitation Card Showcase inside Hero -->
+        <div class="card card-invitation-showcase" style="max-width:540px;margin:0 auto;text-align:left;">
+          <div class="invitation-img-wrap" id="invitation-trigger">
+            <img src="${EVENT.invitationCardImg}" alt="การ์ดเชิญงานอุปสมบท ${EVENT.candidateName} (${EVENT.candidateNickname}) ${EVENT.dateTh}" class="invitation-thumb" />
+            <div class="invitation-overlay">
+              <span>🔍 แตะเพื่อดูการ์ดขยายเต็มจอ</span>
             </div>
           </div>
-
-          <!-- Hosts & Forgiveness Details -->
-          <div class="card card-hosts glass">
-            <div class="hosts-header">
-              <span class="gold-seal">📜</span>
-              <div>
-                <span class="eyebrow" style="color:var(--gold);">เจ้าภาพ & คำขอขมา</span>
-                <h3>รายนามเจ้าภาพ</h3>
-              </div>
+          <div class="invitation-card-foot">
+            <div>
+              <strong>การ์ดเชิญฉบับสมบูรณ์</strong>
+              <p>สามารถแตะขยาย หรือบันทึกภาพเก็บไว้เป็นที่ระลึก</p>
             </div>
-
-            <div class="hosts-list">
-              ${EVENT.hosts.map(h => `
-                <div class="host-item">
-                  <div class="host-role">${h.relation}</div>
-                  <div class="host-name">${h.name}</div>
-                </div>
-              `).join('')}
-            </div>
-
-            <p class="host-invitation-phrase">
-              "${EVENT.hostInvitationText}"
-            </p>
-
-            <div class="forgiveness-box">
-              <div class="fg-title">🙏 บทกราบขอขมาและอโหสิกรรม</div>
-              <p class="fg-quote">
-                "${EVENT.forgivenessText}"
-              </p>
-              <div class="fg-apology">${EVENT.apologyText}</div>
-            </div>
-
-            <div class="blessing-interactive">
-              <div class="blessing-count">
-                <span class="count-num" id="blessing-num">${blessingCount.toLocaleString('th-TH')}</span>
-                <span class="count-label">คนร่วมอนุโมทนาสาธุแล้ว</span>
-              </div>
-              <button class="btn btn-rose btn-bless" id="btn-bless">
-                🙏 ร่วมอนุโมทนา สาธุ
-              </button>
+            <div class="invitation-btn-group">
+              <button class="btn btn-sm btn-primary" id="btn-zoom-card">ขยายดูภาพ</button>
+              <a href="${EVENT.invitationCardImg}" download="การ์ดเชิญอุปสมบท-${EVENT.candidateName}.jpg" class="btn btn-sm">บันทึกรูป</a>
             </div>
           </div>
         </div>
@@ -273,7 +171,7 @@ export async function render(el) {
 
                   <div class="tl-card-actions">
                     <a href="${itemGCal}" target="_blank" rel="noopener" class="btn btn-sm tl-btn-cal" title="เตือนความจำใน Google Calendar">
-                      📅 บันทึกช่วงเวลานี้
+                      📅 บันทึก Google Cal
                     </a>
                     <a href="#/map" class="btn btn-sm btn-ghost tl-btn-map" title="ดูจุดจัดงานในแผนที่ 3D">
                       🗺️ ดูแผนที่ 3D
@@ -454,34 +352,6 @@ export async function render(el) {
       toast('ลิงก์: ' + window.location.href);
     });
   }
-
-  // Interactive Blessings ("อนุโมทนา สาธุ")
-  const blessBtn = el.querySelector('#btn-bless');
-  const blessNum = el.querySelector('#blessing-num');
-
-  blessBtn?.addEventListener('click', (e) => {
-    blessingCount++;
-    localStorage.setItem(blessingKey, String(blessingCount));
-    blessNum.textContent = blessingCount.toLocaleString('th-TH');
-
-    toast('🙏 ขออนุโมทนาบุญด้วยครับ สาธุ สาธุ สาธุ', 'ok');
-
-    // Spawn floating blessing particles
-    const rect = blessBtn.getBoundingClientRect();
-    const emojis = ['🪷', '💛', '✨', '🙏', '🪷', '🤍'];
-    for (let i = 0; i < 7; i++) {
-      const p = document.createElement('div');
-      p.className = 'blessing-particle';
-      p.textContent = emojis[Math.floor(Math.random() * emojis.length)];
-      p.style.left = `${rect.left + rect.width / 2 + (Math.random() * 60 - 30)}px`;
-      p.style.top = `${rect.top + (Math.random() * 20 - 10)}px`;
-      p.style.setProperty('--dx', `${(Math.random() - 0.5) * 120}px`);
-      p.style.setProperty('--dy', `-${100 + Math.random() * 120}px`);
-      p.style.setProperty('--rot', `${(Math.random() - 0.5) * 60}deg`);
-      document.body.appendChild(p);
-      setTimeout(() => p.remove(), 1600);
-    }
-  });
 
   return () => {
     clearInterval(timer);

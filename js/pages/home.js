@@ -7,7 +7,6 @@ const FEATURES = [
   { ico: '📸', bg: '#f9dcda', title: 'Digital Polaroid', text: 'ถ่ายรูปคู่กับภาพพระนวกะ พร้อมคำอวยพร แล้วบันทึกเก็บไว้เป็นความทรงจำ', href: '#/polaroid', status: 'ok', label: 'พร้อมใช้งาน' },
   { ico: '🗓️', bg: '#fef0d8', title: 'กำหนดการพิธีบวช', text: 'กำหนดการพิธีปลงผม เลี้ยงพระ เทศน์สอนนาค แห่นาค และพิธีอุปสมบท 22 พ.ย. 2569', href: '#/schedule', status: 'ok', label: 'พร้อมดูแล้ว' },
   { ico: '🎁', bg: '#fbf0d0', title: 'รับของที่ระลึก', text: 'ผู้ที่เช็กอินแล้วรับ Gift QR สิทธิ์ 1 ครั้งต่อคน', href: '#/gift', status: 'soon', label: 'เร็ว ๆ นี้' },
-  { ico: '🪷', bg: '#efe4f6', title: 'ร่วมทำบุญ', text: 'โอนเงินและแนบสลิป ยอดบริจาคแสดงอย่างโปร่งใสหลังตรวจสอบ', href: '#/donate', status: 'soon', label: 'เร็ว ๆ นี้' },
 ];
 
 export async function render(el) {
@@ -50,7 +49,7 @@ export async function render(el) {
       <div class="section-head">
         <span class="eyebrow">Experience</span>
         <h2>ทุกอย่างของงาน ในแพลตฟอร์มเดียว</h2>
-        <p style="color:var(--cocoa-2)">ตั้งแต่ลงทะเบียน เช็กอิน จนถึงเก็บภาพความทรงจำและร่วมทำบุญ</p>
+        <p style="color:var(--cocoa-2)">ตั้งแต่ลงทะเบียน เช็กอิน จนถึงเก็บภาพความทรงจำ</p>
       </div>
       <div class="grid grid-3">
         ${FEATURES.map((f, i) => `

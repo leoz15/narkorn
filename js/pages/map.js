@@ -5,11 +5,28 @@
  * - 1 monk mascot in front of the temple (idle / wai animation)
  * - Guest characters: pool supports 300, renders 50–100 via InstancedMesh
  * - Attendance numbers come from the data service, never from character count
+ * - Personal character "ME": tap โบสถ์ / เวที / โต๊ะอาหาร to walk there (A* on a nav grid)
+ *   and pray / dance / sit & eat (see map-character.js)
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
 import { EVENT, getStats, onStats } from '../store.js';
-import { countUp } from '../ui.js';
+import { countUp, toast } from '../ui.js';
+import { NavGrid, createMe, ME_STATE } from './map-character.js';
+
+// single live map instance → guarantees exactly one ME even if render() is re-entered
+let activeCleanup = null;
+let renderSeq = 0;
+
+const ME_STATUS = {
+  [ME_STATE.IDLE]: ['👆', 'แตะ <b>โบสถ์</b> · <b>เวที</b> · <b>โต๊ะอาหาร</b> เพื่อพา ME ไปทำกิจกรรม'],
+  [ME_STATE.WALKING_TO_CHURCH]: ['🚶', 'ME กำลังเดินไปหน้าพระ…'],
+  [ME_STATE.PRAYING]: ['🙏', 'ME กำลังไหว้พระ · <b>สาธุ</b>'],
+  [ME_STATE.WALKING_TO_STAGE]: ['🚶', 'ME กำลังเดินไปหน้าเวที…'],
+  [ME_STATE.DANCING]: ['💃', 'ME กำลังเต้นหน้าเวที · <b>ม่วนคักๆ</b>'],
+  [ME_STATE.WALKING_TO_DINING]: ['🚶', 'ME กำลังเดินไปโต๊ะอาหาร…'],
+  [ME_STATE.EATING]: ['🍚', 'ME กำลังรับประทานอาหาร · <b>อนุโมทนาบุญ</b>'],
+};
 
 const CFG = { supported: 300, defaultVisible: 80 };
 
@@ -28,44 +45,64 @@ const HAIRS = ['#2b211b', '#3b2a20', '#1d1714', '#5a3e2b'];
 const ZONES = [
   {
     id: 'temple', name: 'โบสถ์ · พิธีอุปสมบท', short: 'โบสถ์', ico: '🛕', color: '#e8913a', tag: 'Landmark',
-    label: [-18, 11, -6], focus: [-18, 0, -2], hit: { c: [-18, 3, -4], s: [16, 8, 20] },
+    label: [-18, 9, 0], focus: [-15, 0, 1], hit: { c: [-18, 3, -4], s: [16, 8, 20] },
     desc: 'จุดประกอบพิธีอุปสมบทและแห่นาครอบพัทธสีมา ผู้ร่วมงานสามารถร่วมอนุโมทนาบุญบริเวณลานหน้าโบสถ์',
     steps: [['ปลงผมนาค', '09:00'], ['แห่นาค', '13:00'], ['พิธีอุปสมบท', '15:00']],
-    bounds: { x: [-24.5, -11.5], z: [1.8, 5.6] }, share: 0.25,
+    bounds: { x: [-24.5, -11.5], z: [1.8, 5.6] }, share: 0.45,
   },
   {
-    id: 'stage', name: 'เวทีดนตรี & ศาลา', short: 'เวที', ico: '🎵', color: '#8a6fd1', tag: 'Live',
+    id: 'stage', name: 'เวทีบวชนาคมังกร', short: 'บวชนาคมังกร', ico: '🎵', color: '#8a6fd1', tag: 'Live',
     label: [2, 8, -10], focus: [2, 0, -3], hit: { c: [2, 2, -3], s: [18, 6, 18] },
     desc: 'เวทีหลักพร้อมระบบแสง สี เสียง บรรเลงดนตรีเฉลิมฉลอง และพื้นที่ศาลาสำหรับเทศน์สอนนาค',
     steps: [['เปิดเสียงดนตรี', '09:00'], ['เทศน์สอนนาค', '12:30'], ['ดนตรีแห่นาค', '13:00'], ['ดนตรีฉลองพระใหม่', '16:00']],
-    bounds: { x: [-6, 10], z: [-5.5, 6.2] }, share: 0.4,
-  },
-  {
-    id: 'food', name: 'ซุ้มอาหาร (บุฟเฟต์)', short: 'อาหาร', ico: '🍜', color: '#4f9a6b', tag: 'บุฟเฟต์',
-    label: [22, 6.5, 0], focus: [20, 0, 0], hit: { c: [21, 2, 0], s: [8, 6, 30] },
-    desc: 'ซุ้มอาหารบุฟเฟต์คาวหวานและเครื่องดื่มต้อนรับแขกผู้มีเกียรติ เริ่มรับประทาน 11.30 น.',
-    steps: [['เปิดซุ้มอาหาร', '10:30'], ['รับประทานอาหาร', '11:30'], ['ของว่างเครื่องดื่ม', '14:00']],
-    bounds: { x: [16.2, 19.6], z: [-13, 12] }, share: 0.25,
+    bounds: { x: [-6, 10], z: [-5.5, 6.2] }, share: 0.55,
   },
 ];
-const PATH_BOUNDS = { x: [-28, 28], z: [7.2, 8.8] };
+const PATH_BOUNDS = { x: [-25, 12], z: [7.2, 8.8] };
 
 export async function render(el) {
+  const seq = ++renderSeq;
+  if (activeCleanup) { try { activeCleanup(); } catch (e) { console.warn(e); } activeCleanup = null; }
   el.innerHTML = `
   <section class="map-page" id="map-page">
     <div class="map-canvas" id="map-canvas"></div>
     <div class="map-labels" id="map-labels"></div>
 
     <div class="map-hud">
-      <div class="hud-head glass">
-        <div class="logo">🛕</div>
-        <div><h1>MERIT FEST · แผนที่งาน 3D</h1><p>${EVENT.dateTh} · ${EVENT.venue}</p></div>
-        <div class="clock"><span class="dot live" style="color:var(--leaf-d)"></span><span id="map-clock">--:--</span></div>
-      </div>
-      <div class="hud-stats">
-        <div class="hud-stat glass"><div class="k">ลงทะเบียน</div><div class="v"><span id="hs-reg">0</span> <small>คน</small></div></div>
-        <div class="hud-stat glass"><div class="k">เช็กอินแล้ว</div><div class="v"><span id="hs-chk">0</span> <small>/ ${EVENT.target}</small></div><div class="bar"><i id="hs-bar" style="width:0%"></i></div></div>
-        <div class="hud-stat glass"><div class="k">ตัวละครบนแผนที่</div><div class="v"><span id="hs-chr">0</span> <small>/ ${CFG.supported}</small></div></div>
+      <div class="hud-card glass" id="hud-card">
+        <div class="hud-head" id="hud-header" role="button" tabindex="0" aria-expanded="true" title="แตะเพื่อหุบหรือขยายข้อมูล">
+          <div class="logo">🛕</div>
+          <div class="hud-head-main">
+            <div class="hud-head-row">
+              <h1>วัดลานคา · แผนที่งาน 3D</h1>
+              <div class="clock"><span class="dot live" style="color:var(--leaf-d)"></span><span id="map-clock">--:--</span></div>
+            </div>
+            <p class="hud-venue">${EVENT.dateTh} · ${EVENT.venue}</p>
+            <div class="hud-mini-stats" id="hud-mini-stats">
+              <span>ลงทะเบียน <b><span id="hs-reg-mini">0</span></b> คน</span>
+              <span class="sep">•</span>
+              <span>เช็กอิน <b><span id="hs-chk-mini">0</span></b>/${EVENT.target}</span>
+            </div>
+          </div>
+          <button class="hud-toggle-btn" id="hud-toggle" aria-label="หุบหรือขยายข้อมูล" title="หุบหรือขยายข้อมูล">
+            <span class="hud-toggle-icon">▲</span>
+            <span class="hud-toggle-text">หุบ</span>
+          </button>
+        </div>
+
+        <div class="hud-body" id="hud-body">
+          <div class="hud-stats">
+            <div class="hud-stat">
+              <div class="k"><span class="stat-ico">📝</span> ลงทะเบียน</div>
+              <div class="v"><span id="hs-reg">0</span> <small>คน</small></div>
+            </div>
+            <div class="hud-stat">
+              <div class="k"><span class="stat-ico">✅</span> เช็กอินแล้ว</div>
+              <div class="v"><span id="hs-chk">0</span> <small>/ ${EVENT.target}</small></div>
+              <div class="bar"><i id="hs-bar" style="width:0%"></i></div>
+            </div>
+          </div>
+        </div>
       </div>
     </div>
 
@@ -89,6 +126,12 @@ export async function render(el) {
 
     <div class="zone-sheet glass" id="zone-sheet" role="dialog" aria-live="polite"></div>
 
+    <div class="me-status glass" id="me-status" aria-live="polite">
+      <span class="me-status-ico" id="me-status-ico">👆</span>
+      <span class="me-status-text" id="me-status-text"></span>
+      <button class="me-status-btn" id="me-focus" title="เลื่อนกล้องไปที่ ME">📍 ดู ME</button>
+    </div>
+
     <div class="map-loading" id="map-loading"><div style="text-align:center;color:var(--cocoa-2)"><div class="spinner"></div>กำลังสร้างโลกจำลอง…</div></div>
   </section>`;
 
@@ -102,7 +145,11 @@ export async function render(el) {
     el.querySelector('#map-loading').innerHTML = `<div class="card" style="max-width:420px;text-align:center"><img src="./assets/hero.jpg" alt="ภาพแผนที่งาน" style="border-radius:12px;margin-bottom:12px"/>อุปกรณ์นี้ไม่รองรับ 3D แสดงภาพแผนที่แทน</div>`;
     return;
   }
-  await document.fonts.ready;
+  await Promise.all([
+    document.fonts.ready,
+    document.fonts.load('700 54px Prompt', 'ME สาธุ ม่วนคักๆ อนุโมทนาบุญ').catch(() => { }),
+  ]);
+  if (seq !== renderSeq || !el.isConnected) return; // superseded by a newer render
 
   // ---------- Renderer / scene / camera ----------
   const isMobile = matchMedia('(max-width: 760px)').matches;
@@ -116,20 +163,29 @@ export async function render(el) {
   const scene = new THREE.Scene();
   scene.background = new THREE.Color('#f6ecd9');
 
+  const HOME_TARGET_DESKTOP = new THREE.Vector3(-14, 0, 1);
+  const HOME_TARGET_MOBILE = new THREE.Vector3(-15, 0, 2);
+  const HOME_OFFSET_DESKTOP = new THREE.Vector3(40, 36, 40);
+  const HOME_OFFSET_MOBILE = new THREE.Vector3(36, 38, 36);
+
+  const getHomeTarget = () => matchMedia('(max-width: 760px)').matches ? HOME_TARGET_MOBILE.clone() : HOME_TARGET_DESKTOP.clone();
+  const getHomeOffset = () => matchMedia('(max-width: 760px)').matches ? HOME_OFFSET_MOBILE.clone() : HOME_OFFSET_DESKTOP.clone();
+
   const camera = new THREE.OrthographicCamera(-1, 1, 1, -1, 0.1, 500);
-  const HOME_OFFSET = new THREE.Vector3(48, 46, 48);
-  camera.position.copy(HOME_OFFSET);
-  camera.lookAt(0, 0, 0);
+  const initialTarget = getHomeTarget();
+  const initialOffset = getHomeOffset();
+  camera.position.copy(initialTarget).add(initialOffset);
+  camera.lookAt(initialTarget);
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
   controls.dampingFactor = 0.08;
-  controls.minZoom = 0.7;
+  controls.minZoom = 0.6;
   controls.maxZoom = 4;
   controls.minPolarAngle = 0.45;
   controls.maxPolarAngle = 1.15;
   controls.screenSpacePanning = false;
-  controls.target.set(0, 0, 0);
+  controls.target.copy(initialTarget);
 
   // lights
   scene.add(new THREE.HemisphereLight('#fff6e6', '#8fbf6c', 1.25));
@@ -137,7 +193,7 @@ export async function render(el) {
   sun.position.set(30, 50, 22);
   sun.castShadow = true;
   sun.shadow.mapSize.set(isMobile ? 1024 : 2048, isMobile ? 1024 : 2048);
-  Object.assign(sun.shadow.camera, { left: -45, right: 45, top: 40, bottom: -40, near: 1, far: 140 });
+  Object.assign(sun.shadow.camera, { left: -34, right: 34, top: 34, bottom: -34, near: 1, far: 140 });
   sun.shadow.bias = -0.0008;
   sun.shadow.normalBias = 0.02;
   scene.add(sun);
@@ -169,24 +225,28 @@ export async function render(el) {
   }, w, h);
 
   // ---------- Ground (floating diorama) ----------
-  box(78, 0.6, 58, COL.grass, 0, -0.6, 0, world, false);
-  box(78, 2.4, 58, COL.dirt, 0, -3.0, 0, world, false);
-  box(78.2, 0.25, 58.2, COL.dirt2, 0, -3.1, 0, world, false);
+  const GW = 56, GD = 54, GCX = -9;
+  const walkables = []; // surfaces ME stands on (ground-height raycast)
+  walkables.push(box(GW, 0.6, GD, COL.grass, GCX, -0.6, 0, world, false));
+  box(GW, 2.4, GD, COL.dirt, GCX, -3.0, 0, world, false);
+  box(GW + 0.2, 0.25, GD + 0.2, COL.dirt2, GCX, -3.1, 0, world, false);
   // grass patches for texture
-  for (let i = 0; i < 26; i++) {
-    const p = box(2 + Math.random() * 4, 0.02, 2 + Math.random() * 4, COL.grass2, -36 + Math.random() * 72, 0, -26 + Math.random() * 52, world, false);
+  for (let i = 0; i < 22; i++) {
+    const p = box(2 + Math.random() * 4, 0.02, 2 + Math.random() * 4, COL.grass2, (GCX - GW / 2 + 3) + Math.random() * (GW - 6), 0, -23 + Math.random() * 46, world, false);
     p.rotation.y = Math.random() * Math.PI;
+    walkables.push(p);
   }
 
   // ---------- Paths ----------
   const pathM = M(COL.path);
-  box(60, 0.05, 3, pathM, 0, 0, 8, world, false);                // main E–W walkway (connects all zones)
-  box(3.5, 0.05, 16, pathM, 0, 0, 17, world, false);             // entrance
-  box(3, 0.05, 26, pathM, 18, 0, -1, world, false);              // food walkway
-  box(16, 0.06, 13, M(COL.plaza), 2, 0, 0.5, world, false);      // stage plaza
-  box(15, 0.07, 5.5, M(COL.stone), -18, 0, 3.6, world, false);   // temple courtyard
+  walkables.push(
+    box(38, 0.05, 3, pathM, -7, 0, 8, world, false),               // main E–W walkway (connects entrance, stage, temple)
+    box(3.5, 0.05, 16, pathM, 0, 0, 17, world, false),             // entrance
+    box(16, 0.06, 13, M(COL.plaza), 2, 0, 0.5, world, false),      // stage plaza
+    box(15, 0.07, 5.5, M(COL.stone), -18, 0, 3.6, world, false),   // temple courtyard
+  );
   // stepping stones
-  for (let i = 0; i < 6; i++) box(1.1, 0.06, 0.8, M(COL.stone), -27 + i * 0.3, 0, 10 + i * 1.3, world, false);
+  for (let i = 0; i < 6; i++) walkables.push(box(1.1, 0.06, 0.8, M(COL.stone), -27 + i * 0.3, 0, 10 + i * 1.3, world, false));
 
   // ---------- Zone 1: Temple (Ubosot) ----------
   const temple = new THREE.Group(); temple.position.set(-18, 0, -6); world.add(temple);
@@ -272,8 +332,8 @@ export async function render(el) {
   box(13.5, 0.3, 0.3, COL.metal, 0, 7.2, 3, stage); box(13.5, 0.3, 0.3, COL.metal, 0, 7.2, -3, stage);
   box(0.3, 0.3, 6.3, COL.metal, -6.6, 7.2, 0, stage); box(0.3, 0.3, 6.3, COL.metal, 6.6, 7.2, 0, stage);
   // banner
-  const banner = new THREE.Mesh(new THREE.BoxGeometry(7, 1, 0.1), [M('#c96f1c'), M('#c96f1c'), M('#c96f1c'), M('#c96f1c'),
-  new THREE.MeshStandardMaterial({ map: textTex('MERIT FEST ♪', '#e8913a', '#fff', '700 72px Prompt', 768, 110) }), M('#c96f1c')]);
+  const banner = new THREE.Mesh(new THREE.BoxGeometry(7.2, 1, 0.1), [M('#c96f1c'), M('#c96f1c'), M('#c96f1c'), M('#c96f1c'),
+  new THREE.MeshStandardMaterial({ map: textTex('บวชนาคมังกร ♪', '#e8913a', '#fff', '700 68px Prompt', 768, 110) }), M('#c96f1c')]);
   banner.position.set(0, 6.4, 3); stage.add(banner); disposables.push(banner.geometry);
   // speakers
   for (const x of [-5.4, 5.4]) { box(1.1, 1.8, 1, COL.dark, x, 1.1, 1.8, stage); cyl(0.3, 0.3, 0.05, '#555', x, 2.1, 2.31, stage).rotation.x = Math.PI / 2; }
@@ -330,7 +390,7 @@ export async function render(el) {
       const cx = x + Math.cos(a) * 1.45, cz = z + Math.sin(a) * 1.45;
       d.position.set(cx, 0.45, cz); d.rotation.set(0, -a + Math.PI / 2, 0); d.updateMatrix(); iSeat.setMatrixAt(ti * CHAIRS_PER + c, d.matrix);
       d.position.set(x + Math.cos(a) * 1.7, 0.75, z + Math.sin(a) * 1.7); d.updateMatrix(); iBack.setMatrixAt(ti * CHAIRS_PER + c, d.matrix);
-      seatPositions.push({ x: cx, z: cz, face: Math.atan2(x - cx, z - cz) });
+      seatPositions.push({ x: cx, z: cz, face: Math.atan2(x - cx, z - cz), table: ti, back: [x + Math.cos(a) * 1.7, z + Math.sin(a) * 1.7] });
     }
   });
 
@@ -354,47 +414,26 @@ export async function render(el) {
   flagPts.forEach(({ p, i }, k) => { d.position.copy(p).add(new THREE.Vector3(0, -0.2, 0)); d.rotation.set(Math.PI, 0, 0); d.updateMatrix(); iFlag.setMatrixAt(k, d.matrix); iFlag.setColorAt(k, new THREE.Color(SHIRTS[(i + k) % SHIRTS.length])); });
   [iBulb, iFlag].forEach(m => { world.add(m); disposables.push(m.geometry); });
 
-  // ---------- Zone 3: Food stalls (row) ----------
-  const SHOPS = [['ก๋วยเตี๋ยว', '#e8913a', '#fff'], ['ข้าวมันไก่', '#f28b82', '#fff'], ['ส้มตำ', '#7fa36b', '#fff'], ['ชาไทย', '#d4701a', '#fff'], ['ขนมไทย', '#c58af9', '#fff'], ['ไอศกรีม', '#8ab4f8', '#fff']];
-  SHOPS.forEach(([name, c1], i) => {
-    const z = -12.5 + i * 5;
-    const g = new THREE.Group(); g.position.set(22, 0, z); world.add(g);
-    box(2.4, 0.1, 4.2, '#d9c6a3', 0, 0, 0, g, false);
-    box(1.4, 1.05, 3.6, COL.wood, -0.6, 0, 0, g);
-    box(1.5, 0.1, 3.7, '#f5ead7', -0.6, 1.05, 0, g);
-    box(0.2, 2.2, 3.6, COL.woodD, 0.9, 0, 0, g);
-    for (const zz of [-1.9, 1.9]) for (const xx of [-1.3, 0.9]) box(0.14, 2.9, 0.14, COL.woodD, xx, 0, zz, g);
-    // striped awning
-    const stripe = canvasTex((cx, w, h) => { for (let k = 0; k < 8; k++) { cx.fillStyle = k % 2 ? '#ffffff' : c1; cx.fillRect(0, k * h / 8, w, h / 8); } }, 64, 128);
-    const awn = new THREE.Mesh(new THREE.BoxGeometry(2.8, 0.08, 4.4), new THREE.MeshStandardMaterial({ map: stripe, roughness: .8 }));
-    awn.position.set(-0.4, 3.05, 0); awn.rotation.z = 0.28; awn.castShadow = true; g.add(awn); disposables.push(awn.geometry, awn.material);
-    // sign facing the walkway (-x)
-    const signM = new THREE.MeshStandardMaterial({ map: textTex(name, '#fffaf0', '#4a3428', '600 64px Prompt') }); disposables.push(signM);
-    const sign = new THREE.Mesh(new THREE.BoxGeometry(0.12, 0.8, 3.2), [M(COL.woodD), signM, M(COL.woodD), M(COL.woodD), M(COL.woodD), M(COL.woodD)]);
-    sign.position.set(-1.0, 3.75, 0); g.add(sign); disposables.push(sign.geometry);
-    // food on counter
-    for (let k = 0; k < 3; k++) cyl(0.25, 0.2, 0.22, ['#ffcf6b', '#f28b82', '#a7d08c', '#fff'][(i + k) % 4], -0.7, 1.15, -1.1 + k * 1.1, g, 8);
-    // lanterns
-    for (const zz of [-1.6, 1.6]) { const l = add(new THREE.Mesh(new THREE.SphereGeometry(0.2, 8, 6), new THREE.MeshBasicMaterial({ color: '#ff7b5c' })), g, false); l.position.set(-1.45, 2.6, zz); }
-    // vendor
-    const v = new THREE.Group(); v.position.set(0.2, 0.05, 0); g.add(v);
-    add(new THREE.Mesh(new THREE.CylinderGeometry(0.2, 0.28, 0.75, 8), M(c1)), v).position.y = 0.38;
-    add(new THREE.Mesh(new THREE.SphereGeometry(0.24, 10, 8), M(SKINS[i % 4])), v).position.y = 0.98;
-  });
-  // ambient tables near food
-  for (const z of [-8, 2, 10]) { cyl(0.6, 0.6, 0.08, COL.cloth, 13.5, 0.72, z, world, 10); cyl(0.1, 0.2, 0.72, COL.woodD, 13.5, 0, z, world, 6); }
-
   // ---------- Entrance arch ----------
   const arch = new THREE.Group(); arch.position.set(0, 0, 21); world.add(arch);
   for (const x of [-2.6, 2.6]) { box(0.8, 4.4, 0.8, COL.white, x, 0, 0, arch); box(1, 0.3, 1, COL.gold, x, 4.4, 0, arch); }
   const archSign = new THREE.Mesh(new THREE.BoxGeometry(6.6, 1.1, 0.4), [M(COL.roof1), M(COL.roof1), M(COL.gold), M(COL.roof1),
-  new THREE.MeshStandardMaterial({ map: textTex('MERIT FEST · งานบวช & ดนตรี', '#c8442f', '#ffe7a8', '600 46px Prompt', 768, 128) }), M(COL.roof1)]);
+  new THREE.MeshStandardMaterial({ map: textTex('วัดลานคา · บวชนาคมังกร', '#c8442f', '#ffe7a8', '600 46px Prompt', 768, 128) }), M(COL.roof1)]);
   archSign.position.set(0, 4.95, 0); archSign.castShadow = true; arch.add(archSign); disposables.push(archSign.geometry);
   const archRoof = add(prism(7.4, 1.1, 1.2, COL.roof2), arch); archRoof.position.y = 5.5;
 
   // ---------- Nature ----------
   const trees = [];
-  const treeSpots = [[-34, -24], [-30, -26], [-36, -14], [-35, -2], [-34, 8], [-8, -24], [-3, -26], [8, -25], [13, -23], [28, -25], [34, -20], [35, -9], [35, 3], [34, 14], [30, 24], [24, 25], [12, 25], [-10, 25], [-17, 24], [-35, 22], [-6, 14], [6, 14], [-10, 12], [11, 13], [27, -16], [27, 16], [-27, -20], [-24, 15]];
+  const treeSpots = [
+    // Left perimeter & back
+    [-34, -22], [-29, -24], [-35, -13], [-34, -2], [-34, 8], [-34, 20], [-27, -19], [-24, 15],
+    // Back center
+    [-17, -23], [-10, -24], [-3, -25], [4, -24], [10, -22],
+    // Right perimeter (curving gracefully around stage)
+    [15, -18], [17, -9], [17, 1], [16, 10], [14, 18],
+    // Front perimeter & entrance flanking
+    [9, 23], [-2, 23], [-10, 23], [-17, 23], [-6, 14], [6, 14], [-10, 12], [11, 13]
+  ];
   treeSpots.forEach(([x, z], i) => {
     if (i % 4 === 0) { // palm
       const trunk = cyl(0.14, 0.22, 4.2, COL.trunk, x, 0, z, world, 6); trunk.rotation.z = 0.08;
@@ -411,9 +450,12 @@ export async function render(el) {
     }
   });
   // bushes & flowers
-  for (let i = 0; i < 40; i++) {
-    const x = -36 + Math.random() * 72, z = -26 + Math.random() * 52;
-    if (Math.abs(z - 8) < 2.5 || (x > -26 && x < -10 && z > -16 && z < 6) || (x > -7 && x < 12 && z > -14 && z < 7) || (x > 16 && x < 25 && z > -15 && z < 14) || (Math.abs(x) < 3 && z > 8)) continue;
+  const bushSpots = [];
+  for (let i = 0; i < 35; i++) {
+    const x = (GCX - GW / 2 + 2) + Math.random() * (GW - 4);
+    const z = -GD / 2 + 3 + Math.random() * (GD - 6);
+    if (Math.abs(z - 8) < 2.5 || (x > -26 && x < -10 && z > -16 && z < 6) || (x > -7 && x < 12 && z > -14 && z < 7) || (Math.abs(x) < 3 && z > 8)) continue;
+    bushSpots.push([x, z]);
     const b = add(new THREE.Mesh(new THREE.IcosahedronGeometry(0.5 + Math.random() * 0.3, 0), M(COL.leaf2))); b.position.set(x, 0.35, z);
     if (i % 2) { const fl = add(new THREE.Mesh(new THREE.SphereGeometry(0.14, 6, 4), M(['#f9a8c0', '#ffe28a', '#ffffff', '#f28b82'][i % 4])), world, false); fl.position.set(x + 0.3, 0.75, z + 0.2); }
   }
@@ -429,7 +471,7 @@ export async function render(el) {
   // clouds (drifting, cast soft shadows)
   const clouds = [];
   for (let i = 0; i < 4; i++) {
-    const cg = new THREE.Group(); cg.position.set(-40 + i * 24, 18 + Math.random() * 4, -20 + Math.random() * 30); world.add(cg);
+    const cg = new THREE.Group(); cg.position.set(-36 + i * 18, 18 + Math.random() * 4, -18 + Math.random() * 26); world.add(cg);
     for (let k = 0; k < 4; k++) { const p = add(new THREE.Mesh(new THREE.IcosahedronGeometry(1.4 + Math.random(), 0), M('#ffffff')), cg, true, false); p.position.set(k * 1.5 - 2, Math.random() * 0.6, Math.random() - 0.5); }
     cg.userData.v = 0.6 + Math.random() * 0.5; clouds.push(cg);
   }
@@ -450,15 +492,19 @@ export async function render(el) {
 
   const rand = (a, b) => a + Math.random() * (b - a);
   const nearTable = (x, z) => tableSpots.some(([tx, tz]) => Math.hypot(x - tx, z - tz) < 2.0);
+  // ME position + reserved activity spot — guests keep clear of both
+  const meAvoid = { x: 1e4, z: 1e4, rx: 1e4, rz: 1e4 };
+  const ME_CLEAR = 0.65;
+  const nearMe = (x, z) => Math.hypot(x - meAvoid.x, z - meAvoid.z) < ME_CLEAR + 0.35 || Math.hypot(x - meAvoid.rx, z - meAvoid.rz) < 1.1;
   const pickIn = (b, zoneId) => {
-    for (let k = 0; k < 12; k++) { const x = rand(...b.x), z = rand(...b.z); if (zoneId !== 'stage' || !nearTable(x, z)) return [x, z]; }
+    for (let k = 0; k < 12; k++) { const x = rand(...b.x), z = rand(...b.z); if ((zoneId !== 'stage' || !nearTable(x, z)) && !nearMe(x, z)) return [x, z]; }
     return [rand(...b.x), rand(...b.z)];
   };
   const agents = [];
   const seatPool = seatPositions.slice().sort(() => Math.random() - 0.5);
   for (let i = 0; i < CFG.supported; i++) {
     const r = Math.random();
-    let zone = r < 0.25 ? ZONES[0] : r < 0.65 ? ZONES[1] : r < 0.9 ? ZONES[2] : null;
+    let zone = r < 0.4 ? ZONES[0] : r < 0.85 ? ZONES[1] : null;
     const b = zone ? zone.bounds : PATH_BOUNDS;
     const seat = zone?.id === 'stage' && Math.random() < 0.45 ? seatPool.pop() : null;
     const [x, z] = seat ? [seat.x, seat.z] : pickIn(b, zone?.id);
@@ -476,10 +522,22 @@ export async function render(el) {
   agents.sort(() => Math.random() - 0.5);
 
   let visible = CFG.defaultVisible;
+  let meSeat = null, meTable = null; // chair currently claimed by ME
+  const seatTaken = (seat) => { for (let i = 0; i < visible; i++) if (agents[i].seat === seat) return true; return false; };
+  /** a guest that becomes visible on ME's chair stands up and wanders instead (no overlap) */
+  const freeSeatFor = (seat) => {
+    for (let i = 0; i < visible; i++) {
+      const a = agents[i];
+      if (a.seat !== seat) continue;
+      a.seat = null; [a.x, a.z] = pickIn(a.b, a.zone); a.tx = a.x; a.tz = a.z; a.idle = rand(0.5, 2);
+    }
+  };
   const setVisible = n => {
     visible = Math.max(50, Math.min(100, n));
     [iBody, iHead, iHair].forEach(m => { m.count = visible; });
-    countUp(el.querySelector('#hs-chr'), visible, 500);
+    if (meSeat) freeSeatFor(meSeat);
+    const chrEl = el.querySelector('#hs-chr');
+    if (chrEl) countUp(chrEl, visible, 500);
     el.querySelectorAll('#density button').forEach(b => b.classList.toggle('btn-dark', Number(b.dataset.n) === visible));
   };
   setVisible(visible);
@@ -508,6 +566,14 @@ export async function render(el) {
           bob = Math.abs(Math.sin(t * 10 + a.phase)) * 0.09;
         }
       }
+      if (!a.seat) {
+        // yield to ME: step aside and never target ME's spot
+        const mdx = a.x - meAvoid.x, mdz = a.z - meAvoid.z, md = Math.hypot(mdx, mdz);
+        if (md < ME_CLEAR) {
+          if (md > 1e-4) { a.x = meAvoid.x + (mdx / md) * ME_CLEAR; a.z = meAvoid.z + (mdz / md) * ME_CLEAR; } else a.x += ME_CLEAR;
+        }
+        if (nearMe(a.tx, a.tz)) { [a.tx, a.tz] = pickIn(a.b, a.zone); if (a.idle <= 0) a.idle = 0; }
+      }
       dummy.position.set(a.x, 0.07 + bob, a.z);
       dummy.rotation.set(0, a.face, 0);
       dummy.scale.setScalar(a.scale * (a.seat ? 0.92 : 1));
@@ -527,12 +593,119 @@ export async function render(el) {
     const b = document.createElement('button');
     b.className = 'map-label'; b.id = `zone-label-${z.id}`;
     b.innerHTML = `<span>${z.ico}</span>${z.short}<span class="cnt">${z.tag}</span>`;
-    b.addEventListener('click', ev => { ev.stopPropagation(); openZone(z); });
+    b.addEventListener('click', ev => { ev.stopPropagation(); openZone(z); }); // label = info card
     labelsEl.appendChild(b);
     return { el: b, pos: new THREE.Vector3(...z.label) };
   });
+  // per-table interaction zones (tables + chairs) — checked before the wide stage zone
+  const tableHits = tableSpots.map(([x, z], ti) => {
+    const m = new THREE.Mesh(new THREE.CylinderGeometry(2.05, 2.05, 1.5, 16), new THREE.MeshBasicMaterial());
+    m.position.set(x, 0.75, z); m.visible = false; m.userData.table = ti; scene.add(m); disposables.push(m.geometry, m.material);
+    return m;
+  });
 
-  // ---------- Camera helpers ----------
+  // ---------- Navigation grid (walkable area minus obstacles) ----------
+  const nav = new NavGrid({ minX: GCX - GW / 2 + 1, maxX: GCX + GW / 2 - 1, minZ: -GD / 2 + 1, maxZ: GD / 2 - 1, cell: 0.35 });
+  const PAD = 0.24; // ME body radius
+  nav.blockRect(-25.5, -10.5, -15.5, 3.5, PAD);                                   // temple platform, hall, columns, walls
+  nav.blockCircle(-18, 2.6, 1.5, PAD);                                            // monk mascot pedestal
+  [[-27, 5.5], [-9, 5.5]].forEach(([x, z]) => nav.blockCircle(x, z, 0.12, PAD));  // flag poles
+  nav.blockRect(-4.5, 8.5, -13.25, -6.75, PAD);                                   // stage deck + truss
+  nav.blockRect(0.8, 3.2, -6.75, -5.4, PAD);                                      // stage stairs
+  for (const x of [-5.6, 9.6]) nav.blockRect(x - 0.65, x + 0.65, -8, -6.8, PAD);  // floor speakers
+  poles.forEach(([x, z]) => nav.blockCircle(x, z, 0.12, PAD));                    // light poles
+  tableSpots.forEach(([x, z]) => nav.blockCircle(x, z, 1.0, PAD));                // tables
+  seatPositions.forEach(s => { nav.blockCircle(s.x, s.z, 0.27, PAD); nav.blockCircle(s.back[0], s.back[1], 0.27, PAD); }); // chairs
+  treeSpots.forEach(([x, z], i) => nav.blockCircle(x, z, i % 4 === 0 ? 0.25 : 0.4, PAD));
+  bushSpots.forEach(([x, z]) => nav.blockCircle(x, z, 0.55, PAD));
+  nav.blockEllipse(-28, 17, 5.2, 3.6, PAD);                                       // lotus pond
+  for (const x of [-2.6, 2.6]) nav.blockRect(x - 0.4, x + 0.4, 20.6, 21.4, PAD);  // entrance arch pillars
+
+  // real ground height under ME (raycast against walkable surfaces)
+  const downRay = new THREE.Raycaster(); downRay.far = 6;
+  const DOWN = new THREE.Vector3(0, -1, 0), _origin = new THREE.Vector3();
+  const groundY = (x, z) => { _origin.set(x, 3, z); downRay.set(_origin, DOWN); const h = downRay.intersectObjects(walkables, false)[0]; return h ? h.point.y : 0; };
+
+  // ---------- Personal character: ME (created exactly once per map instance) ----------
+  const pageEl = el.querySelector('#map-page');
+  const statusIco = el.querySelector('#me-status-ico'), statusText = el.querySelector('#me-status-text');
+  const showStatus = (s) => {
+    const [ico, txt] = ME_STATUS[s] || ME_STATUS[ME_STATE.IDLE];
+    statusIco.textContent = ico; statusText.innerHTML = txt;
+    pageEl.dataset.meState = s;
+    const box = el.querySelector('#me-status'); box.classList.remove('pop'); void box.offsetWidth; box.classList.add('pop');
+    if (s === ME_STATE.PRAYING || s === ME_STATE.DANCING || s === ME_STATE.EATING) {
+      triggerActivityCloseUp(me.kind);
+    }
+  };
+  const me = createMe({ scene, nav, groundY, start: [-3, 8.3], startFace: Math.PI / 4, onState: showStatus });
+  showStatus(ME_STATE.IDLE);
+
+  const SPOTS = {
+    church: { kind: 'church', key: 'church', x: -18, z: 5.3, face: Math.PI },               // in front of the monk / temple steps
+    stage: { kind: 'stage', key: 'stage', x: -0.8, z: -5.2, face: Math.atan2(2.8, -4.8) },  // dance floor in front of the stage (not on it)
+  };
+  const blockedToast = () => toast('ME ยังไปจุดนั้นไม่ได้ ลองแตะที่อื่นนะ', 'error');
+  function applyCommand(res, target, seat = null, table = null) {
+    if (res !== 'ok') return res;
+    meSeat = seat; meTable = table;
+    meAvoid.rx = target.x; meAvoid.rz = target.z;
+    if (seat) freeSeatFor(seat);
+    startFollow();
+    return res;
+  }
+  function commandSpot(spot) {
+    const res = me.goTo(spot);
+    if (res === 'blocked') blockedToast();
+    else if (res === 'same') triggerActivityCloseUp(spot.kind);
+    return applyCommand(res, spot);
+  }
+  function commandDining(ti, point) {
+    if (me.kind === 'dining' && meTable === ti) {
+      triggerActivityCloseUp('dining');
+      return 'same';
+    }
+    const cands = seatPositions
+      .map((s, i) => ({ s, i, d: Math.hypot(s.x - point.x, s.z - point.z) + (s.table === ti ? 0 : 2.5) }))
+      .sort((a, b) => a.d - b.d);
+    let tries = 0;
+    for (const { s, i } of cands) {
+      if (seatTaken(s)) continue;              // occupied → next closest chair
+      if (++tries > 8) break;
+      const allow = (x, z) => Math.hypot(x - s.x, z - s.z) < 0.62 && Math.hypot(x - s.back[0], z - s.back[1]) > 0.32;
+      const target = { kind: 'dining', key: `seat-${i}`, x: s.x, z: s.z, face: s.face, sit: true, allow };
+      const res = me.goTo(target);
+      if (res !== 'blocked') return applyCommand(res, target, s, s.table);
+    }
+    // no free chair → safe standing spot beside the table, out of the way
+    const [tx, tz] = tableSpots[ti];
+    const a0 = Math.atan2(point.z - tz, point.x - tx);
+    for (let k = 0; k < 12; k++) {
+      const a = a0 + (k % 2 ? 1 : -1) * Math.ceil(k / 2) * 0.5;
+      const x = tx + Math.cos(a) * 2.5, z = tz + Math.sin(a) * 2.5;
+      if (!nav.isFree(x, z)) continue;
+      const target = { kind: 'dining', key: `stand-${ti}-${k}`, x, z, face: Math.atan2(tx - x, tz - z), sit: false };
+      const res = me.goTo(target);
+      if (res !== 'blocked') return applyCommand(res, target, null, ti);
+    }
+    blockedToast();
+    return 'blocked';
+  }
+
+  // ---------- Camera helpers & Follow System ----------
+  const DEFAULT_ZOOM = 1.0;
+  const WALK_ZOOM = isMobile ? 1.2 : 1.28;
+  const CLOSE_ZOOM = {
+    church: isMobile ? 1.55 : 1.72,
+    stage:  isMobile ? 1.55 : 1.72,
+    dining: isMobile ? 1.62 : 1.82,
+  };
+  const ACTIVITY_LEAD = {
+    church: 1.2,
+    stage:  1.5,
+    dining: 0.9,
+  };
+
   let anim = null;
   function flyTo(target, zoom, offset = camera.position.clone().sub(controls.target)) {
     anim = {
@@ -542,16 +715,170 @@ export async function render(el) {
       fromZ: camera.zoom, toZ: zoom,
     };
   }
-  const goHome = () => flyTo([0, 0, 0], 1, HOME_OFFSET.clone());
+  const goHome = () => flyTo(getHomeTarget().toArray(), DEFAULT_ZOOM, getHomeOffset());
   function rotateBy(rad) {
     const off = camera.position.clone().sub(controls.target);
     off.applyAxisAngle(new THREE.Vector3(0, 1, 0), rad);
     flyTo(controls.target.toArray(), camera.zoom, off);
   }
 
+  // Camera Follow State
+  let followActive = false;
+  let followState = 'idle'; // 'walking' | 'activity' | 'settled' | 'idle'
+  let isUserInteracting = false;
+  let followDesiredZoom = DEFAULT_ZOOM;
+  let shouldAdjustZoom = false;
+  let settleElapsed = 0;
+
+  controls.addEventListener('start', () => {
+    isUserInteracting = true;
+    shouldAdjustZoom = false; // respect user manual zoom during interactions
+  });
+  controls.addEventListener('end', () => {
+    isUserInteracting = false;
+  });
+
+  function startFollow() {
+    followActive = true;
+    followState = 'walking';
+    settleElapsed = 0;
+    anim = null; // stop any ongoing overview flyTo so follow takes over smoothly
+    followDesiredZoom = WALK_ZOOM;
+    shouldAdjustZoom = true;
+  }
+
+  function triggerActivityCloseUp(kind) {
+    followActive = true;
+    followState = 'activity';
+    settleElapsed = 0;
+    anim = null;
+    followDesiredZoom = CLOSE_ZOOM[kind] || (isMobile ? 1.55 : 1.72);
+    shouldAdjustZoom = true;
+  }
+
+  function stopFollow() {
+    followActive = false;
+    followState = 'idle';
+  }
+
+  const _camDir = new THREE.Vector3();
+  const _desiredTarget = new THREE.Vector3();
+
+  function updateCameraFollow(dt) {
+    if (!followActive) return;
+    if (anim) return; // allow user manual flyTo / rotation animations to play out without fighting
+
+    const isWalking = me.state === ME_STATE.WALKING_TO_CHURCH ||
+                      me.state === ME_STATE.WALKING_TO_STAGE ||
+                      me.state === ME_STATE.WALKING_TO_DINING;
+
+    const isActivity = me.state === ME_STATE.PRAYING ||
+                       me.state === ME_STATE.DANCING ||
+                       me.state === ME_STATE.EATING;
+
+    if (isWalking) {
+      followState = 'walking';
+      settleElapsed = 0;
+      followDesiredZoom = WALK_ZOOM;
+      shouldAdjustZoom = true;
+    } else if (isActivity) {
+      if (followState !== 'activity' && followState !== 'settled') {
+        followState = 'activity';
+        settleElapsed = 0;
+        followDesiredZoom = CLOSE_ZOOM[me.kind] || (isMobile ? 1.55 : 1.72);
+        shouldAdjustZoom = true;
+      }
+    }
+
+    // Lead vector: projects in camera's ground forward direction so ME stays in lower-center of viewport
+    camera.getWorldDirection(_camDir);
+    _camDir.y = 0;
+    if (_camDir.lengthSq() > 0.0001) _camDir.normalize();
+
+    let lead = 1.8;
+    if (followState === 'walking') {
+      lead = isMobile ? 2.2 : 1.8;
+    } else if (me.kind === 'church') {
+      lead = 1.2;
+    } else if (me.kind === 'stage') {
+      lead = 1.5;
+    } else if (me.kind === 'dining') {
+      lead = 0.9;
+    } else {
+      lead = 1.2;
+    }
+
+    const my = Number.isFinite(me.y) ? me.y : 0;
+    _desiredTarget.set(me.x, my + 0.6, me.z).addScaledVector(_camDir, lead);
+
+    // Smooth exponential damping (fluid tracking without warping)
+    const lambda = isUserInteracting ? 2.2 : (followState === 'walking' ? 4.2 : 3.2);
+    const factor = 1 - Math.exp(-lambda * dt);
+
+    const dx = (_desiredTarget.x - controls.target.x) * factor;
+    const dy = (_desiredTarget.y - controls.target.y) * factor;
+    const dz = (_desiredTarget.z - controls.target.z) * factor;
+
+    if (Number.isFinite(dx) && Number.isFinite(dy) && Number.isFinite(dz)) {
+      controls.target.x += dx;
+      controls.target.y += dy;
+      controls.target.z += dz;
+
+      camera.position.x += dx;
+      camera.position.y += dy;
+      camera.position.z += dz;
+    }
+
+    // Smooth zoom adjustment
+    if (shouldAdjustZoom && !isUserInteracting) {
+      const zDiff = followDesiredZoom - camera.zoom;
+      if (Math.abs(zDiff) > 0.01) {
+        camera.zoom += zDiff * (1 - Math.exp(-3.0 * dt));
+        camera.updateProjectionMatrix();
+      } else {
+        shouldAdjustZoom = false;
+      }
+    }
+
+    if (followState === 'activity') {
+      settleElapsed += dt;
+      const dist = Math.hypot(_desiredTarget.x - controls.target.x, _desiredTarget.z - controls.target.z);
+      if (settleElapsed > 2.0 && dist < 0.08 && !shouldAdjustZoom) {
+        followState = 'settled';
+        followActive = false; // settled in close-up: user can freely orbit around ME
+      }
+    }
+  }
+
+  // Click "📍 ดู ME": Zoom out to default overview (1.0), or toggle back into close-up if already at default during activity
+  el.querySelector('#me-focus').addEventListener('click', () => {
+    stopFollow();
+    const my = Number.isFinite(me.y) ? me.y : 0;
+    const isActivity = me.state === ME_STATE.PRAYING || me.state === ME_STATE.DANCING || me.state === ME_STATE.EATING;
+
+    // "ถ้ากด ดู me ก็จะขยายออกที่ default ไว้" -> Zoom out to default zoom (1.0)
+    // If user is already zoomed out near default (<= 1.15) and ME is doing an activity, allow zooming back in to close-up!
+    const targetZoom = (camera.zoom > 1.2 || !isActivity)
+      ? DEFAULT_ZOOM
+      : (CLOSE_ZOOM[me.kind] || (isMobile ? 1.55 : 1.72));
+
+    let tx = me.x, tz = me.z;
+    if (targetZoom > 1.2 && isActivity) {
+      camera.getWorldDirection(_camDir);
+      _camDir.y = 0;
+      if (_camDir.lengthSq() > 0.0001) _camDir.normalize();
+      const lead = ACTIVITY_LEAD[me.kind] || 1.2;
+      tx += _camDir.x * lead;
+      tz += _camDir.z * lead;
+    }
+
+    flyTo([tx, my + 0.6, tz], targetZoom);
+  });
+
   const today = new Date();
   const isEventDay = today.toDateString() === new Date(EVENT.date).toDateString();
   function openZone(z) {
+    stopFollow();
     labels.forEach((l, i) => l.el.classList.toggle('active', ZONES[i] === z));
     const nowMin = today.getHours() * 60 + today.getMinutes();
     const idx = isEventDay ? z.steps.reduce((acc, [, t], i) => { const [h, m] = t.split(':').map(Number); return nowMin >= h * 60 + m ? i : acc; }, -1) : -1;
@@ -572,26 +899,61 @@ export async function render(el) {
   }
   function closeZone() { sheet.classList.remove('open'); labels.forEach(l => l.el.classList.remove('active')); }
 
-  el.querySelector('#mc-zoom-in').onclick = () => flyTo(controls.target.toArray(), Math.min(controls.maxZoom, camera.zoom * 1.35));
-  el.querySelector('#mc-zoom-out').onclick = () => flyTo(controls.target.toArray(), Math.max(controls.minZoom, camera.zoom / 1.35));
+  el.querySelector('#mc-zoom-in').onclick = () => { shouldAdjustZoom = false; flyTo(controls.target.toArray(), Math.min(controls.maxZoom, camera.zoom * 1.35)); };
+  el.querySelector('#mc-zoom-out').onclick = () => { shouldAdjustZoom = false; flyTo(controls.target.toArray(), Math.max(controls.minZoom, camera.zoom / 1.35)); };
   el.querySelector('#mc-rot-l').onclick = () => rotateBy(Math.PI / 4);
   el.querySelector('#mc-rot-r').onclick = () => rotateBy(-Math.PI / 4);
-  el.querySelector('#mc-home').onclick = () => { closeZone(); goHome(); };
+  el.querySelector('#mc-home').onclick = () => { stopFollow(); closeZone(); goHome(); };
 
-  // click / tap on 3D zones (ignore drags)
+  // click / tap on 3D scene → character command (drags, pinches & right-clicks are camera gestures)
   const raycaster = new THREE.Raycaster(); const ndc = new THREE.Vector2();
-  let downAt = null;
-  const onDown = e => { downAt = [e.clientX, e.clientY]; anim = null; };
-  const onUp = e => {
-    if (!downAt || Math.hypot(e.clientX - downAt[0], e.clientY - downAt[1]) > 6) return;
+  function pick(clientX, clientY) {
     const r = renderer.domElement.getBoundingClientRect();
-    ndc.set(((e.clientX - r.left) / r.width) * 2 - 1, -((e.clientY - r.top) / r.height) * 2 + 1);
+    ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
     raycaster.setFromCamera(ndc, camera);
-    const hit = raycaster.intersectObjects(hitMeshes)[0];
-    hit ? openZone(hit.object.userData.zone) : closeZone();
+    const t = raycaster.intersectObjects(tableHits, false)[0];
+    if (t) return { type: 'dining', table: t.object.userData.table, point: t.point };
+    const z = raycaster.intersectObjects(hitMeshes, false)[0];
+    if (z) return { type: z.object.userData.zone.id === 'temple' ? 'church' : 'stage' };
+    return null;
+  }
+  function handleTap(clientX, clientY) {
+    const p = pick(clientX, clientY);
+    closeZone(); // close the location detail card and command ME in the same tap
+    if (!p) return;
+    if (p.type === 'church') commandSpot(SPOTS.church);
+    else if (p.type === 'stage') commandSpot(SPOTS.stage);
+    else commandDining(p.table, p.point);
+  }
+  const pointers = new Set();
+  let downAt = null, multiTouch = false, hoverAt = null;
+  const onDown = e => {
+    pointers.add(e.pointerId);
+    if (pointers.size > 1) { multiTouch = true; downAt = null; } else { multiTouch = false; downAt = [e.clientX, e.clientY]; }
+    anim = null;
   };
+  const onUp = e => {
+    pointers.delete(e.pointerId);
+    const start = downAt; downAt = null;
+    if (multiTouch) { if (!pointers.size) multiTouch = false; return; }
+    if (!start || !e.isPrimary || e.button > 0) return;
+    const tol = e.pointerType === 'mouse' ? 6 : 12;
+    if (Math.hypot(e.clientX - start[0], e.clientY - start[1]) > tol) return;
+    handleTap(e.clientX, e.clientY);
+  };
+  const onCancel = e => { pointers.delete(e.pointerId); downAt = null; if (!pointers.size) multiTouch = false; };
+  const onMove = e => {
+    if (e.pointerType === 'mouse' && !e.buttons) {
+      hoverAt = [e.clientX, e.clientY];
+      renderer.domElement.style.cursor = pick(e.clientX, e.clientY) ? 'pointer' : 'default';
+    }
+  };
+  const onLeave = () => { renderer.domElement.style.cursor = 'default'; };
   renderer.domElement.addEventListener('pointerdown', onDown);
   renderer.domElement.addEventListener('pointerup', onUp);
+  renderer.domElement.addEventListener('pointercancel', onCancel);
+  renderer.domElement.addEventListener('pointermove', onMove);
+  renderer.domElement.addEventListener('pointerleave', onLeave);
 
   // ---------- Resize ----------
   const VIEW = 40;
@@ -599,7 +961,14 @@ export async function render(el) {
     const w = container.clientWidth, h = container.clientHeight;
     if (!w || !h) return;
     const aspect = w / h;
-    const vh = aspect < 1 ? VIEW / aspect * 0.62 : VIEW * 0.72;
+    let vh;
+    if (aspect < 1) {
+      // Mobile portrait mode: ensure temple and monk mascot are prominently framed
+      const targetHSpan = 30;
+      vh = targetHSpan / aspect;
+    } else {
+      vh = VIEW * 0.48;
+    }
     camera.left = -vh * aspect / 2; camera.right = vh * aspect / 2; camera.top = vh / 2; camera.bottom = -vh / 2;
     camera.updateProjectionMatrix();
     renderer.setSize(w, h);
@@ -608,12 +977,66 @@ export async function render(el) {
 
   // ---------- Stats (from data service, not characters) ----------
   const applyStats = s => {
-    countUp(el.querySelector('#hs-reg'), s.registered);
-    countUp(el.querySelector('#hs-chk'), s.checkedIn);
-    el.querySelector('#hs-bar').style.width = Math.min(100, (s.checkedIn / s.target) * 100) + '%';
+    const reg = el.querySelector('#hs-reg');
+    const chk = el.querySelector('#hs-chk');
+    const regMini = el.querySelector('#hs-reg-mini');
+    const chkMini = el.querySelector('#hs-chk-mini');
+    const bar = el.querySelector('#hs-bar');
+
+    if (reg) countUp(reg, s.registered);
+    if (chk) countUp(chk, s.checkedIn);
+    if (regMini) countUp(regMini, s.registered);
+    if (chkMini) countUp(chkMini, s.checkedIn);
+    if (bar) bar.style.width = Math.min(100, (s.checkedIn / s.target) * 100) + '%';
   };
   applyStats(await getStats());
   const offStats = onStats(applyStats);
+
+  // ---------- Collapsible HUD Card ----------
+  const hudCard = el.querySelector('#hud-card');
+  const hudToggle = el.querySelector('#hud-toggle');
+  const hudHeader = el.querySelector('#hud-header');
+
+  function toggleHud(forceState) {
+    if (!hudCard) return;
+    const isCollapsed = forceState !== undefined ? forceState : !hudCard.classList.contains('is-collapsed');
+    hudCard.classList.toggle('is-collapsed', isCollapsed);
+    if (hudHeader) {
+      hudHeader.setAttribute('aria-expanded', (!isCollapsed).toString());
+    }
+    if (hudToggle) {
+      const icon = hudToggle.querySelector('.hud-toggle-icon');
+      const text = hudToggle.querySelector('.hud-toggle-text');
+      if (icon) icon.textContent = isCollapsed ? '▼' : '▲';
+      if (text) text.textContent = isCollapsed ? 'ขยาย' : 'หุบ';
+      hudToggle.setAttribute('aria-expanded', (!isCollapsed).toString());
+    }
+    try {
+      sessionStorage.setItem('map_hud_collapsed', isCollapsed ? '1' : '0');
+    } catch { }
+  }
+
+  hudToggle?.addEventListener('click', (ev) => {
+    ev.stopPropagation();
+    toggleHud();
+  });
+
+  hudHeader?.addEventListener('click', (ev) => {
+    if (ev.target.closest('button, a')) return;
+    toggleHud();
+  });
+
+  hudHeader?.addEventListener('keydown', (ev) => {
+    if (ev.key === 'Enter' || ev.key === ' ') {
+      ev.preventDefault();
+      toggleHud();
+    }
+  });
+
+  // Restore saved collapse preference if exists
+  if (sessionStorage.getItem('map_hud_collapsed') === '1') {
+    toggleHud(true);
+  }
 
   const clockEl = el.querySelector('#map-clock');
   const clockTick = () => { clockEl.textContent = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }); };
@@ -652,10 +1075,15 @@ export async function render(el) {
     notes.forEach(n => { n.userData.t += dt; const p = (n.userData.t % 4) / 4; n.position.set(n.userData.x + Math.sin(p * 6) * 0.6, 3 + p * 6, 2); n.material.opacity = Math.sin(p * Math.PI); });
     bulbMat.color.setHSL(0.13, 1, 0.68 + Math.sin(t * 3) * 0.08);
 
-    clouds.forEach(c => { c.position.x += c.userData.v * dt; if (c.position.x > 48) c.position.x = -48; });
+    clouds.forEach(c => { c.position.x += c.userData.v * dt; if (c.position.x > 26) c.position.x = -38; });
     trees.forEach((f, i) => { f.rotation.z = Math.sin(t * 1.2 + i) * 0.03; });
 
+    me.update(dt, t, camera);
+    meAvoid.x = me.x; meAvoid.z = me.z;
     updateAgents(dt, t);
+
+    updateCameraFollow(dt);
+
     renderer.render(scene, camera);
 
     // labels
@@ -675,13 +1103,17 @@ export async function render(el) {
   document.addEventListener('visibilitychange', onVis);
 
   // ---------- Cleanup ----------
-  return () => {
+  const cleanupFn = () => {
+    if (activeCleanup === cleanupFn) activeCleanup = null;
     running = false; cancelAnimationFrame(raf);
     clearInterval(clockTimer); offStats(); ro.disconnect();
     document.removeEventListener('visibilitychange', onVis);
     controls.dispose();
+    me?.dispose?.();
     disposables.forEach(o => o?.dispose?.());
     [iBody, iHead, iHair, iTop, iLeg, iSeat, iBack, iCenter, iBulb, iFlag].forEach(m => m.dispose());
     renderer.dispose(); renderer.forceContextLoss?.();
   };
+  activeCleanup = cleanupFn;
+  return cleanupFn;
 }

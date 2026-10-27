@@ -14,7 +14,6 @@ const routes = {
   staff: () => import('./pages/staff.js'),
   schedule: () => import('./pages/schedule.js'),
   gift: () => import('./pages/soon.js').then(m => ({ render: (el) => m.render(el, 'gift') })),
-  donate: () => import('./pages/soon.js').then(m => ({ render: (el) => m.render(el, 'donate') })),
   admin: () => import('./pages/soon.js').then(m => ({ render: (el) => m.render(el, 'admin') })),
 };
 
