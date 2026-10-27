@@ -347,7 +347,7 @@ p { margin: 0 0 1em; line-height: 1.7; }
 .map-labels { position: absolute; inset: 0; pointer-events: none; z-index: 4; }
 .map-label {
   position: absolute; transform: translate(-50%, -100%); pointer-events: auto; cursor: pointer;
-  background: #fff; padding: 6px 12px; border-radius: 999px; font-size: 13px; font-weight: 600;
+  background: #fff; padding: 7px 14px; border-radius: 999px; font-size: 14px; font-weight: 600;
   box-shadow: var(--shadow); white-space: nowrap; display: flex; gap: 6px; align-items: center;
   transition: transform .2s var(--ease), opacity .3s; border: 2px solid transparent;
 }
@@ -376,10 +376,10 @@ p { margin: 0 0 1em; line-height: 1.7; }
 .zs-timeline .tp.done:not(:last-child)::after { background: var(--leaf); }
 .map-legend { position: absolute; left: 14px; bottom: 14px; z-index: 4; padding: 10px 14px; border-radius: 14px; font-size: 12px; color: var(--cocoa-2); }
 .me-status {
-  position: absolute; left: 50%; bottom: 16px; transform: translateX(-50%); z-index: 5;
-  display: flex; align-items: center; gap: 10px; padding: 8px 16px; border-radius: 999px;
+  position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 5;
+  display: flex; align-items: center; gap: 10px; padding: 9px 18px; border-radius: 999px;
   background: rgba(255, 250, 242, 0.94); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
-  border: 1px solid var(--line); box-shadow: var(--shadow-md); font-size: 13px; color: var(--cocoa);
+  border: 1px solid var(--line); box-shadow: var(--shadow-md); font-size: 14px; color: var(--cocoa);
   transition: opacity .3s, transform .25s var(--ease); pointer-events: auto;
 }
 .zone-sheet.open ~ .me-status { opacity: 0; pointer-events: none; }
@@ -389,7 +389,7 @@ p { margin: 0 0 1em; line-height: 1.7; }
 .me-status-text { white-space: nowrap; line-height: 1.3; }
 .me-status-btn {
   border: none; background: var(--cream-2); color: var(--cocoa); font-weight: 600;
-  padding: 4px 10px; border-radius: 999px; cursor: pointer; font-size: 12px; flex: none;
+  padding: 5px 12px; border-radius: 999px; cursor: pointer; font-size: 13px; flex: none;
   transition: background .2s, transform .15s;
 }
 .me-status-btn:hover { background: var(--saffron); color: #fff; transform: scale(1.05); }
@@ -953,16 +953,16 @@ p { margin: 0 0 1em; line-height: 1.7; }
   .hud-mini-stats { font-size: 11px; gap: 5px; }
   .map-controls { right: 8px; padding: 4px; }
   .map-controls button { width: 36px; height: 36px; font-size: 15px; }
-  .map-label { padding: 5px 10px; font-size: 12px; }
+  .map-label { padding: 6px 12px; font-size: 14px; }
   .zone-sheet { bottom: 92px; }
   .map-legend { display: none; }
   .me-status {
-    bottom: calc(76px + env(safe-area-inset-bottom)); max-width: calc(100vw - 24px);
-    padding: 6px 12px; gap: 8px; font-size: 11.5px;
+    bottom: calc(100px + env(safe-area-inset-bottom)); max-width: calc(100vw - 24px);
+    padding: 7px 14px; gap: 8px; font-size: 13px;
   }
-  .me-status-ico { font-size: 16px; }
-  .me-status-text { overflow: hidden; text-overflow: ellipsis; }
-  .me-status-btn { padding: 3px 8px; font-size: 11px; }
+  .me-status-ico { font-size: 17px; }
+  .me-status-text { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; font-size: 13px; }
+  .me-status-btn { padding: 4px 10px; font-size: 12px; white-space: nowrap; }
   .map-page { height: calc(100vh - var(--topbar-h)); height: calc(100dvh - var(--topbar-h)); }
   .countdown .unit { min-width: 0; flex: 1; }
 

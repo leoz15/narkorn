@@ -345,22 +345,22 @@ function buildClips() {
  * Billboard labels
  * ===================================================================== */
 function labelTexture(text, { bg, fg, border }, disposables) {
-  const font = '700 54px Prompt, "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
+  const font = '700 64px Prompt, "Segoe UI Emoji", "Apple Color Emoji", "Noto Color Emoji", sans-serif';
   const meas = document.createElement('canvas').getContext('2d'); meas.font = font;
   const tw = meas.measureText(text).width;
-  const H = 92, tail = 16, pad = 12, w = Math.ceil(tw + 64 + pad * 2), h = H + tail + pad * 2;
+  const H = 104, tail = 18, pad = 14, w = Math.ceil(tw + 72 + pad * 2), h = H + tail + pad * 2;
   const c = document.createElement('canvas'); c.width = w; c.height = h;
   const g = c.getContext('2d');
-  g.shadowColor = 'rgba(60,40,20,.28)'; g.shadowBlur = 10; g.shadowOffsetY = 3;
+  g.shadowColor = 'rgba(60,40,20,.28)'; g.shadowBlur = 12; g.shadowOffsetY = 4;
   const x = pad, y = pad, rw = w - pad * 2, r = H / 2;
   g.beginPath();
   g.moveTo(x + r, y); g.lineTo(x + rw - r, y); g.arc(x + rw - r, y + r, r, -Math.PI / 2, Math.PI / 2);
-  g.lineTo(w / 2 + 14, y + H); g.lineTo(w / 2, y + H + tail); g.lineTo(w / 2 - 14, y + H);
+  g.lineTo(w / 2 + 16, y + H); g.lineTo(w / 2, y + H + tail); g.lineTo(w / 2 - 16, y + H);
   g.lineTo(x + r, y + H); g.arc(x + r, y + r, r, Math.PI / 2, Math.PI * 1.5); g.closePath();
   g.fillStyle = bg; g.fill();
-  g.shadowColor = 'transparent'; g.lineWidth = 6; g.strokeStyle = border; g.stroke();
+  g.shadowColor = 'transparent'; g.lineWidth = 7; g.strokeStyle = border; g.stroke();
   g.fillStyle = fg; g.font = font; g.textAlign = 'center'; g.textBaseline = 'middle';
-  g.fillText(text, w / 2, y + H / 2 + 3);
+  g.fillText(text, w / 2, y + H / 2 + 4);
   const tex = new THREE.CanvasTexture(c); tex.colorSpace = THREE.SRGBColorSpace; tex.anisotropy = 4;
   disposables.push(tex);
   return { tex, aspect: w / h };
@@ -522,21 +522,21 @@ export function createMe({ scene, nav, groundY, start, startFace = Math.PI * 0.7
     ring.scale.setScalar(me.seated ? 0.001 : pulse);
     if (dest.visible) { dest.scale.setScalar(1 + ((t * 1.5) % 1) * 0.5); destMat.opacity = 0.85 * (1 - ((t * 1.5) % 1)); }
 
-    // ---- billboard labels (size compensates camera zoom) ----
-    const zs = THREE.MathUtils.clamp(1 / Math.pow(camera.zoom, 0.6), 0.45, 1.35);
+    // ---- billboard labels (scaled up for clear ~14px visibility on mobile & desktop) ----
+    const zs = THREE.MathUtils.clamp(1 / Math.pow(camera.zoom, 0.45), 0.6, 1.5);
     const headTop = me.y + 1.45;
-    const chipH = (me.bubbleOn ? 0.42 : 0.5) * zs;
+    const chipH = (me.bubbleOn ? 0.64 : 0.74) * zs;
     chip.scale.set(chipH * chipTex.aspect, chipH, 1);
-    chip.position.set(me.x, headTop + 0.08 * zs, me.z);
+    chip.position.set(me.x, headTop + 0.12 * zs, me.z);
     if (bubble.visible) {
       if (me.bubbleOn) me.bubbleT = Math.min(1, me.bubbleT + dt / 0.38);
       else me.bubbleT = Math.max(0, me.bubbleT - dt / 0.15);
       const k = me.bubbleOn ? easeOutBack(me.bubbleT) : me.bubbleT;
-      const bh = 0.62 * zs * Math.max(0.001, k);
+      const bh = 0.96 * zs * Math.max(0.001, k);
       bubble.scale.set(bh * bubble.userData.aspect, bh, 1);
       bubble.material.opacity = Math.min(1, me.bubbleT * 1.6);
-      const bob = Math.sin(t * 2.4) * 0.04 * zs;
-      bubble.position.set(me.x, chip.position.y + chipH + 0.05 * zs + bob, me.z);
+      const bob = Math.sin(t * 2.4) * 0.05 * zs;
+      bubble.position.set(me.x, chip.position.y + chipH + 0.08 * zs + bob, me.z);
       if (!me.bubbleOn && me.bubbleT <= 0) bubble.visible = false;
     }
     _v.set(me.x, me.y, me.z);

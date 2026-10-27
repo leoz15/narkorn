@@ -110,7 +110,7 @@ export async function render(el) {
     <div class="me-status glass" id="me-status" aria-live="polite">
       <span class="me-status-ico" id="me-status-ico">👆</span>
       <span class="me-status-text" id="me-status-text"></span>
-      <button class="me-status-btn" id="me-focus" title="เลื่อนกล้องไปที่ ME">📍 ดู ME</button>
+      <button class="me-status-btn" id="me-focus" title="เลื่อนกล้องไปที่ ME">📍 คลิ๊กเพื่อดู ME</button>
     </div>
 
     <div class="map-loading" id="map-loading"><div style="text-align:center;color:var(--cocoa-2)"><div class="spinner"></div>กำลังสร้างโลกจำลอง…</div></div>
@@ -675,11 +675,11 @@ export async function render(el) {
 
   // ---------- Camera helpers & Follow System ----------
   const DEFAULT_ZOOM = 1.0;
-  const WALK_ZOOM = isMobile ? 1.2 : 1.28;
+  const WALK_ZOOM = isMobile ? 1.3 : 1.38;
   const CLOSE_ZOOM = {
-    church: isMobile ? 1.55 : 1.72,
-    stage:  isMobile ? 1.55 : 1.72,
-    dining: isMobile ? 1.62 : 1.82,
+    church: isMobile ? 2.5 : 2.7,
+    stage:  isMobile ? 2.5 : 2.7,
+    dining: isMobile ? 2.6 : 2.8,
   };
   const ACTIVITY_LEAD = {
     church: 1.2,
@@ -831,24 +831,22 @@ export async function render(el) {
     }
   }
 
-  // Click "📍 ดู ME": Zoom out to default overview (1.0), or toggle back into close-up if already at default during activity
+  // Click "📍 คลิ๊กเพื่อดู ME": Zoom in to close-up focus on ME (or toggle overview if already zoomed in close)
   el.querySelector('#me-focus').addEventListener('click', () => {
     stopFollow();
     const my = Number.isFinite(me.y) ? me.y : 0;
     const isActivity = me.state === ME_STATE.PRAYING || me.state === ME_STATE.DANCING || me.state === ME_STATE.EATING;
+    const focusZoom = CLOSE_ZOOM[me.kind] || (isMobile ? 2.5 : 2.7);
 
-    // "ถ้ากด ดู me ก็จะขยายออกที่ default ไว้" -> Zoom out to default zoom (1.0)
-    // If user is already zoomed out near default (<= 1.15) and ME is doing an activity, allow zooming back in to close-up!
-    const targetZoom = (camera.zoom > 1.2 || !isActivity)
-      ? DEFAULT_ZOOM
-      : (CLOSE_ZOOM[me.kind] || (isMobile ? 1.55 : 1.72));
+    // If already zoomed in close (> 2.0), toggle back to overview; otherwise zoom in all the way to focus on ME
+    const targetZoom = (camera.zoom > 2.0) ? DEFAULT_ZOOM : focusZoom;
 
     let tx = me.x, tz = me.z;
-    if (targetZoom > 1.2 && isActivity) {
+    if (targetZoom > 1.5) {
       camera.getWorldDirection(_camDir);
       _camDir.y = 0;
       if (_camDir.lengthSq() > 0.0001) _camDir.normalize();
-      const lead = ACTIVITY_LEAD[me.kind] || 1.2;
+      const lead = isActivity ? (ACTIVITY_LEAD[me.kind] || 1.2) : 0.8;
       tx += _camDir.x * lead;
       tz += _camDir.z * lead;
     }
