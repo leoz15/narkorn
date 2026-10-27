@@ -445,7 +445,7 @@ export function createMe({ scene, nav, groundY, start, startFace = Math.PI * 0.7
     bubble.material.map = t.tex; bubble.material.needsUpdate = true; bubble.userData.aspect = t.aspect;
     bubble.visible = true; me.bubbleOn = true; me.bubbleT = 0;
   };
-  const hideBubble = () => { me.bubbleOn = false; };
+  const hideBubble = () => { me.bubbleOn = false; me.bubbleT = 0; bubble.visible = false; };
 
   /**
    * Command ME to an activity.
@@ -527,9 +527,17 @@ export function createMe({ scene, nav, groundY, start, startFace = Math.PI * 0.7
     const mobFactor = isMob ? 1.35 : 1.0;
     const zs = THREE.MathUtils.clamp(1 / Math.pow(camera.zoom, 0.45), 0.65, 1.6) * mobFactor;
     const headTop = me.y + 1.45;
-    const chipH = (me.bubbleOn ? 0.72 : 0.85) * zs;
-    chip.scale.set(chipH * chipTex.aspect, chipH, 1);
-    chip.position.set(me.x, headTop + 0.12 * zs, me.z);
+
+    // Show ME chip when walking or idle without speech bubble; hide ME when speech bubble is active
+    const showingBubble = me.bubbleOn || (bubble.visible && me.bubbleT > 0.05);
+    chip.visible = !showingBubble;
+
+    if (chip.visible) {
+      const chipH = 0.85 * zs;
+      chip.scale.set(chipH * chipTex.aspect, chipH, 1);
+      chip.position.set(me.x, headTop + 0.12 * zs, me.z);
+    }
+
     if (bubble.visible) {
       if (me.bubbleOn) me.bubbleT = Math.min(1, me.bubbleT + dt / 0.38);
       else me.bubbleT = Math.max(0, me.bubbleT - dt / 0.15);
@@ -538,7 +546,7 @@ export function createMe({ scene, nav, groundY, start, startFace = Math.PI * 0.7
       bubble.scale.set(bh * bubble.userData.aspect, bh, 1);
       bubble.material.opacity = Math.min(1, me.bubbleT * 1.6);
       const bob = Math.sin(t * 2.4) * 0.05 * zs;
-      bubble.position.set(me.x, chip.position.y + chipH + 0.08 * zs + bob, me.z);
+      bubble.position.set(me.x, headTop + 0.12 * zs + bob, me.z);
       if (!me.bubbleOn && me.bubbleT <= 0) bubble.visible = false;
     }
     _v.set(me.x, me.y, me.z);
