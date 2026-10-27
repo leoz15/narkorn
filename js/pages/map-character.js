@@ -522,17 +522,19 @@ export function createMe({ scene, nav, groundY, start, startFace = Math.PI * 0.7
     ring.scale.setScalar(me.seated ? 0.001 : pulse);
     if (dest.visible) { dest.scale.setScalar(1 + ((t * 1.5) % 1) * 0.5); destMat.opacity = 0.85 * (1 - ((t * 1.5) % 1)); }
 
-    // ---- billboard labels (scaled up for clear ~14px visibility on mobile & desktop) ----
-    const zs = THREE.MathUtils.clamp(1 / Math.pow(camera.zoom, 0.45), 0.6, 1.5);
+    // ---- billboard labels (scaled for mobile font-size 16 equivalent) ----
+    const isMob = typeof window !== 'undefined' && window.matchMedia?.('(max-width: 760px)').matches;
+    const mobFactor = isMob ? 1.35 : 1.0;
+    const zs = THREE.MathUtils.clamp(1 / Math.pow(camera.zoom, 0.45), 0.65, 1.6) * mobFactor;
     const headTop = me.y + 1.45;
-    const chipH = (me.bubbleOn ? 0.64 : 0.74) * zs;
+    const chipH = (me.bubbleOn ? 0.72 : 0.85) * zs;
     chip.scale.set(chipH * chipTex.aspect, chipH, 1);
     chip.position.set(me.x, headTop + 0.12 * zs, me.z);
     if (bubble.visible) {
       if (me.bubbleOn) me.bubbleT = Math.min(1, me.bubbleT + dt / 0.38);
       else me.bubbleT = Math.max(0, me.bubbleT - dt / 0.15);
       const k = me.bubbleOn ? easeOutBack(me.bubbleT) : me.bubbleT;
-      const bh = 0.96 * zs * Math.max(0.001, k);
+      const bh = 1.15 * zs * Math.max(0.001, k);
       bubble.scale.set(bh * bubble.userData.aspect, bh, 1);
       bubble.material.opacity = Math.min(1, me.bubbleT * 1.6);
       const bob = Math.sin(t * 2.4) * 0.05 * zs;

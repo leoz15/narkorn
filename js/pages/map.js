@@ -28,7 +28,7 @@ const ME_STATUS = {
   [ME_STATE.EATING]: ['🍚', 'ME กำลังรับประทานอาหาร · <b>อนุโมทนาบุญ</b>'],
 };
 
-const CFG = { supported: 300, defaultVisible: 80 };
+const CFG = { supported: 300, defaultVisible: 50 };
 
 const COL = {
   grass: '#a8cf86', grass2: '#97c275', dirt: '#b98a5e', dirt2: '#94694a',
@@ -97,13 +97,6 @@ export async function render(el) {
       <button id="mc-home" title="มุมมองเริ่มต้น">⌂</button>
     </div>
 
-    <div class="map-legend glass">
-      <div style="font-weight:600;color:var(--cocoa);margin-bottom:6px">ความหนาแน่นตัวละคร (จำลอง)</div>
-      <div style="display:flex;gap:6px" id="density">
-        ${[50, 80, 100].map(n => `<button class="btn btn-sm ${n === CFG.defaultVisible ? 'btn-dark' : ''}" data-n="${n}" id="density-${n}">${n}</button>`).join('')}
-      </div>
-      <div style="margin-top:6px;font-size:11px">* ตัวละครเป็นภาพจำลอง ยอดผู้ร่วมงานจริงดูจากตัวเลขด้านบน</div>
-    </div>
 
     <div class="zone-sheet glass" id="zone-sheet" role="dialog" aria-live="polite"></div>
 
@@ -145,7 +138,7 @@ export async function render(el) {
   scene.background = new THREE.Color('#f6ecd9');
 
   const HOME_TARGET_DESKTOP = new THREE.Vector3(-14, 0, 1);
-  const HOME_TARGET_MOBILE = new THREE.Vector3(-15, 0, 2);
+  const HOME_TARGET_MOBILE = new THREE.Vector3(-8, 0, 3);
   const HOME_OFFSET_DESKTOP = new THREE.Vector3(40, 36, 40);
   const HOME_OFFSET_MOBILE = new THREE.Vector3(36, 38, 36);
 
@@ -157,6 +150,8 @@ export async function render(el) {
   const initialOffset = getHomeOffset();
   camera.position.copy(initialTarget).add(initialOffset);
   camera.lookAt(initialTarget);
+  camera.zoom = isMobile ? 1.5 : 1.0;
+  camera.updateProjectionMatrix();
 
   const controls = new OrbitControls(camera, renderer.domElement);
   controls.enableDamping = true;
@@ -502,7 +497,7 @@ export async function render(el) {
   // shuffle so any visible subset is distributed across zones
   agents.sort(() => Math.random() - 0.5);
 
-  let visible = CFG.defaultVisible;
+  const visible = 50;
   let meSeat = null, meTable = null; // chair currently claimed by ME
   const seatTaken = (seat) => { for (let i = 0; i < visible; i++) if (agents[i].seat === seat) return true; return false; };
   /** a guest that becomes visible on ME's chair stands up and wanders instead (no overlap) */
@@ -513,16 +508,7 @@ export async function render(el) {
       a.seat = null; [a.x, a.z] = pickIn(a.b, a.zone); a.tx = a.x; a.tz = a.z; a.idle = rand(0.5, 2);
     }
   };
-  const setVisible = n => {
-    visible = Math.max(50, Math.min(100, n));
-    [iBody, iHead, iHair].forEach(m => { m.count = visible; });
-    if (meSeat) freeSeatFor(meSeat);
-    const chrEl = el.querySelector('#hs-chr');
-    if (chrEl) countUp(chrEl, visible, 500);
-    el.querySelectorAll('#density button').forEach(b => b.classList.toggle('btn-dark', Number(b.dataset.n) === visible));
-  };
-  setVisible(visible);
-  el.querySelector('#density').addEventListener('click', e => { const n = e.target.closest('button')?.dataset.n; if (n) setVisible(Number(n)); });
+  [iBody, iHead, iHair].forEach(m => { m.count = visible; });
 
   const dummy = new THREE.Object3D();
   function updateAgents(dt, t) {
@@ -674,12 +660,12 @@ export async function render(el) {
   }
 
   // ---------- Camera helpers & Follow System ----------
-  const DEFAULT_ZOOM = 1.0;
-  const WALK_ZOOM = isMobile ? 1.3 : 1.38;
+  const DEFAULT_ZOOM = isMobile ? 1.5 : 1.0;
+  const WALK_ZOOM = isMobile ? 1.55 : 1.38;
   const CLOSE_ZOOM = {
-    church: isMobile ? 2.5 : 2.7,
-    stage:  isMobile ? 2.5 : 2.7,
-    dining: isMobile ? 2.6 : 2.8,
+    church: isMobile ? 3.3 : 2.7,
+    stage:  isMobile ? 3.3 : 2.7,
+    dining: isMobile ? 3.3 : 2.8,
   };
   const ACTIVITY_LEAD = {
     church: 1.2,
@@ -724,7 +710,7 @@ export async function render(el) {
     followState = 'walking';
     settleElapsed = 0;
     anim = null; // stop any ongoing overview flyTo so follow takes over smoothly
-    followDesiredZoom = WALK_ZOOM;
+    followDesiredZoom = (isMobile && me.kind) ? (CLOSE_ZOOM[me.kind] || 3.3) : WALK_ZOOM;
     shouldAdjustZoom = true;
   }
 
@@ -733,7 +719,7 @@ export async function render(el) {
     followState = 'activity';
     settleElapsed = 0;
     anim = null;
-    followDesiredZoom = CLOSE_ZOOM[kind] || (isMobile ? 1.55 : 1.72);
+    followDesiredZoom = CLOSE_ZOOM[kind] || (isMobile ? 3.3 : 2.7);
     shouldAdjustZoom = true;
   }
 
@@ -760,13 +746,13 @@ export async function render(el) {
     if (isWalking) {
       followState = 'walking';
       settleElapsed = 0;
-      followDesiredZoom = WALK_ZOOM;
+      followDesiredZoom = (isMobile && me.kind) ? (CLOSE_ZOOM[me.kind] || 3.3) : WALK_ZOOM;
       shouldAdjustZoom = true;
     } else if (isActivity) {
       if (followState !== 'activity' && followState !== 'settled') {
         followState = 'activity';
         settleElapsed = 0;
-        followDesiredZoom = CLOSE_ZOOM[me.kind] || (isMobile ? 1.55 : 1.72);
+        followDesiredZoom = CLOSE_ZOOM[me.kind] || (isMobile ? 3.3 : 2.7);
         shouldAdjustZoom = true;
       }
     }
@@ -836,10 +822,10 @@ export async function render(el) {
     stopFollow();
     const my = Number.isFinite(me.y) ? me.y : 0;
     const isActivity = me.state === ME_STATE.PRAYING || me.state === ME_STATE.DANCING || me.state === ME_STATE.EATING;
-    const focusZoom = CLOSE_ZOOM[me.kind] || (isMobile ? 2.5 : 2.7);
+    const focusZoom = CLOSE_ZOOM[me.kind] || (isMobile ? 3.3 : 2.7);
 
-    // If already zoomed in close (> 2.0), toggle back to overview; otherwise zoom in all the way to focus on ME
-    const targetZoom = (camera.zoom > 2.0) ? DEFAULT_ZOOM : focusZoom;
+    // If already zoomed in close (> 2.6 on mobile, > 2.0 on desktop), toggle back to overview; otherwise zoom in all the way to focus on ME
+    const targetZoom = (camera.zoom > (isMobile ? 2.6 : 2.0)) ? DEFAULT_ZOOM : focusZoom;
 
     let tx = me.x, tz = me.z;
     if (targetZoom > 1.5) {
