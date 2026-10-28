@@ -39,8 +39,8 @@ export async function render(el, params = {}) {
         <div class="ticket-actions" style="margin-top:24px">
           <button class="btn btn-rose btn-lg" id="btn-save-ticket">⬇️ บันทึกตั๋วลงเครื่อง</button>
           ${currentTicket.status === 'checked_in'
-            ? `<a href="#/polaroid" class="btn btn-primary btn-lg" id="btn-go-polaroid">📸 สร้างภาพ Polaroid</a>`
-            : `<a href="#/map" class="btn btn-lg" id="btn-go-map">🗺️ ดูแผนที่งาน 3D</a>`}
+          ? `<a href="#/polaroid" class="btn btn-primary btn-lg" id="btn-go-polaroid">📸 สร้างภาพ Polaroid</a>`
+          : `<a href="#/map" class="btn btn-lg" id="btn-go-map">🗺️ ดูแผนที่งาน 3D</a>`}
         </div>
 
         <div class="card glass" style="max-width:460px;margin:32px auto 0;text-align:center;padding:18px 24px">
@@ -109,7 +109,7 @@ export async function render(el, params = {}) {
               <form id="reg-form" novalidate>
                 <h2 style="font-size:20px;margin-bottom:14px">ข้อมูลผู้ร่วมงาน</h2>
                 <div class="field">
-                  <label for="reg-name">ชื่อ - นามสกุล</label>
+                  <label for="reg-name">ชื่อเล่น,ชื่อในวงการ,ชื่อทางการ</label>
                   <input class="input" id="reg-name" name="fullName" autocomplete="name" placeholder="เช่น สมชาย ใจดี" required />
                   <span class="err" data-for="fullName"></span>
                 </div>
@@ -170,7 +170,7 @@ export async function render(el, params = {}) {
         const data = { fullName: form.fullName.value, phone: form.phone.value, consent: form.consent.checked };
         let ok = true;
         setErr('fullName'); setErr('phone'); setErr('consent');
-        if (data.fullName.trim().length < 3) { setErr('fullName', 'กรุณากรอกชื่อ-นามสกุล'); ok = false; }
+        if (data.fullName.trim().length < 2) { setErr('fullName', 'กรุณากรอกชื่อเล่น,ชื่อในวงการ,ชื่อทางการ'); ok = false; }
         if (!isValidThaiPhone(data.phone)) { setErr('phone', 'กรุณากรอกเบอร์โทรศัพท์ให้ถูกต้อง'); ok = false; }
         if (!data.consent) { setErr('consent', 'กรุณายอมรับเงื่อนไขก่อนลงทะเบียน'); ok = false; }
         if (!ok) return;

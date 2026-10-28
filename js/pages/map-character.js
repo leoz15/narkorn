@@ -387,7 +387,7 @@ const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
  * @param {[number,number]} o.start
  * @param {(state:string, info:object)=>void} [o.onState]
  */
-export function createMe({ scene, nav, groundY, start, startFace = Math.PI * 0.75, onState }) {
+export function createMe({ scene, nav, groundY, start, startFace = Math.PI * 0.75, onState, name = 'ME' }) {
   const disposables = [];
   const SCALE = 0.9, SPEED = 2.5;
   const { root, props } = buildMe(disposables);
@@ -404,8 +404,18 @@ export function createMe({ scene, nav, groundY, start, startFace = Math.PI * 0.7
 
   // billboard labels
   const chip = makeSprite(disposables), bubble = makeSprite(disposables);
-  const chipTex = labelTexture('ME', { bg: '#4b3a33', fg: '#ffffff', border: '#ff9f43' }, disposables);
+  let currentLabelName = (name || 'ME').trim() || 'ME';
+  let chipTex = labelTexture(currentLabelName, { bg: '#4b3a33', fg: '#ffffff', border: '#ff9f43' }, disposables);
   chip.material.map = chipTex.tex; chip.material.needsUpdate = true;
+
+  function setName(nextName) {
+    const clean = (nextName || 'ME').trim() || 'ME';
+    if (clean === currentLabelName) return;
+    currentLabelName = clean;
+    chipTex = labelTexture(currentLabelName, { bg: '#4b3a33', fg: '#ffffff', border: '#ff9f43' }, disposables);
+    chip.material.map = chipTex.tex;
+    chip.material.needsUpdate = true;
+  }
   const bubbleTex = {};
   for (const [k, a] of Object.entries(ACTIVITY)) bubbleTex[k] = labelTexture(a.text, { bg: '#fffaf2', fg: '#4b3a33', border: a.border }, disposables);
   bubble.visible = false;
@@ -556,7 +566,7 @@ export function createMe({ scene, nav, groundY, start, startFace = Math.PI * 0.7
     get x() { return me.x; }, get y() { return me.y; }, get z() { return me.z; }, get state() { return me.state; },
     get kind() { return me.kind; }, get key() { return me.key; }, get target() { return me.target; },
     get position() { return _v.set(me.x, me.y, me.z); },
-    goTo, update,
+    goTo, update, setName,
     dispose() {
       mixer.stopAllAction(); mixer.uncacheRoot(root);
       scene.remove(root, ring, dest, chip, bubble);

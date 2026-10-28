@@ -10,7 +10,7 @@
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { EVENT, getStats, onStats, recordVisit } from '../store.js';
+import { EVENT, getStats, onStats, recordVisit, getMyTicket } from '../store.js';
 import { countUp, toast } from '../ui.js';
 import { NavGrid, createMe, ME_STATE } from './map-character.js';
 
@@ -605,7 +605,15 @@ export async function render(el) {
       triggerActivityCloseUp(me.kind);
     }
   };
-  const me = createMe({ scene, nav, groundY, start: [-3, 8.3], startFace: Math.PI / 4, onState: showStatus });
+  const myTicket = await getMyTicket();
+  if (seq !== renderSeq || !el.isConnected) return;
+  const me = createMe({
+    scene, nav, groundY,
+    start: [-3, 8.3],
+    startFace: Math.PI / 4,
+    onState: showStatus,
+    name: myTicket?.fullName || 'ME',
+  });
   showStatus(ME_STATE.IDLE);
 
   const SPOTS = {
@@ -942,12 +950,15 @@ export async function render(el) {
 
   // ---------- Stats (from data service, not characters) ----------
   recordVisit();
-  const applyStats = s => {
+  const applyStats = async s => {
     const visitors = el.querySelector('#hs-visitors');
     const chk = el.querySelector('#hs-chk');
 
     if (visitors) countUp(visitors, s.visitors || 0);
     if (chk) countUp(chk, s.checkedIn || 0);
+
+    const latestTicket = await getMyTicket();
+    me.setName(latestTicket?.fullName || 'ME');
   };
   applyStats(await getStats());
   const offStats = onStats(applyStats);

@@ -1,4 +1,6 @@
 /** Small UI helpers shared by pages. */
+import { icon } from './icons.js';
+export { icon };
 
 export const $ = (sel, root = document) => root.querySelector(sel);
 export const $$ = (sel, root = document) => [...root.querySelectorAll(sel)];

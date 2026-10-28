@@ -2,7 +2,7 @@ import {
   EVENT, listRegistrations, getStats, onStats,
   toggleCheckIn, deleteRegistration, seedDemo, resetAll
 } from '../store.js';
-import { esc, toast, fmtTime, countUp, footer } from '../ui.js';
+import { esc, toast, fmtTime, countUp, footer, icon } from '../ui.js';
 
 const STAFF_SESSION_KEY = 'mf.staff.session.v1';
 const STAFF_PIN_KEY = 'mf.staff.pin.v1';
@@ -67,7 +67,7 @@ export async function render(el) {
       <section class="page container">
         <div class="staff-login-wrap">
           <div class="card glass staff-login-card">
-            <div class="staff-login-badge">🔐 STAFF CONSOLE</div>
+            <div class="staff-login-badge">${icon('lock', 'fill')} STAFF CONSOLE</div>
             <h1 class="hand staff-login-title">ระบบหลังบ้านเจ้าหน้าที่</h1>
             <p class="staff-login-sub">สำหรับดูยอดผู้ลงทะเบียนออนไลน์ แดชบอร์ดสถิติ และรายชื่อผู้เข้าร่วมงาน</p>
 
@@ -96,7 +96,7 @@ export async function render(el) {
               </div>
 
               <button type="submit" class="btn btn-primary btn-lg btn-block" style="margin-top:18px">
-                🔓 เข้าสู่ระบบเจ้าหน้าที่
+                ${icon('unlock', 'fill')} เข้าสู่ระบบเจ้าหน้าที่
               </button>
             </form>
           </div>
@@ -201,14 +201,14 @@ export async function render(el) {
             <span class="badge ok"><span class="dot live"></span> LIVE DASHBOARD</span>
             <h1 class="hand staff-main-title">แดชบอร์ดและรายชื่อผู้ลงทะเบียน</h1>
             <p class="staff-subtitle">
-              👤 ปฏิบัติงานโดย: <strong id="staff-current-name">${esc(session.staffName)}</strong>
-              &nbsp;·&nbsp; 📅 ${esc(EVENT.dateTh)}
+              ${icon('users')} ปฏิบัติงานโดย: <strong id="staff-current-name">${esc(session.staffName)}</strong>
+              &nbsp;·&nbsp; ${icon('calendar')} ${esc(EVENT.dateTh)}
             </p>
           </div>
           <div class="staff-topbar-actions">
-            <button type="button" class="btn btn-sm" id="btn-export-csv">📥 ส่งออกรายชื่อ (CSV)</button>
-            <button type="button" class="btn btn-sm" id="btn-seed-demo">🧪 จำลองข้อมูลตัวอย่าง</button>
-            <button type="button" class="btn btn-sm btn-ghost" id="btn-logout" style="color:var(--rose-d)">🔒 ล็อกหน้าจอ</button>
+            <button type="button" class="btn btn-sm" id="btn-export-csv">${icon('download')} ส่งออกรายชื่อ (CSV)</button>
+            <button type="button" class="btn btn-sm" id="btn-seed-demo">${icon('flask')} จำลองข้อมูลตัวอย่าง</button>
+            <button type="button" class="btn btn-sm btn-ghost" id="btn-logout" style="color:var(--rose-d)">${icon('lock')} ล็อกหน้าจอ</button>
           </div>
         </div>
 
@@ -217,7 +217,7 @@ export async function render(el) {
           <div class="card staff-kpi-card kpi-primary">
             <div class="kpi-head">
               <span class="kpi-label">ผู้ลงทะเบียนเข้าร่วมงานทั้งหมด</span>
-              <span class="kpi-ico">👥</span>
+              <span class="kpi-ico" style="color:var(--saffron-d)">${icon('users', 'fill')}</span>
             </div>
             <div class="kpi-value">
               <span id="kpi-reg">${stats.registered.toLocaleString('th-TH')}</span>
@@ -231,7 +231,7 @@ export async function render(el) {
           <div class="card staff-kpi-card kpi-success">
             <div class="kpi-head">
               <span class="kpi-label">เช็กอินเข้าร่วมงานแล้ว</span>
-              <span class="kpi-ico">✅</span>
+              <span class="kpi-ico" style="color:var(--leaf-d)">${icon('check', 'fill')}</span>
             </div>
             <div class="kpi-value">
               <span id="kpi-chk">${stats.checkedIn.toLocaleString('th-TH')}</span>
@@ -245,7 +245,7 @@ export async function render(el) {
           <div class="card staff-kpi-card">
             <div class="kpi-head">
               <span class="kpi-label">รอเช็กอินเข้างาน</span>
-              <span class="kpi-ico">⏳</span>
+              <span class="kpi-ico">${icon('clock')}</span>
             </div>
             <div class="kpi-value">
               <span id="kpi-pending">${(stats.pending || 0).toLocaleString('th-TH')}</span>
@@ -259,7 +259,7 @@ export async function render(el) {
           <div class="card staff-kpi-card kpi-visitors">
             <div class="kpi-head">
               <span class="kpi-label">ผู้เข้าชมเว็บไซต์รวม</span>
-              <span class="kpi-ico">👀</span>
+              <span class="kpi-ico">${icon('eye')}</span>
             </div>
             <div class="kpi-value">
               <span id="kpi-vis">${(stats.visitors || 1).toLocaleString('th-TH')}</span>
@@ -299,7 +299,7 @@ export async function render(el) {
           <div class="staff-list-head">
             <div>
               <span class="eyebrow">Online Registrations</span>
-              <h2>📋 รายชื่อผู้ลงทะเบียนเข้าร่วมงาน</h2>
+              <h2>${icon('users', 'fill')} รายชื่อผู้ลงทะเบียนเข้าร่วมงาน</h2>
             </div>
             <div class="staff-list-counter" id="list-summary-pill">
               ทั้งหมด <strong>0</strong> คน
@@ -309,14 +309,14 @@ export async function render(el) {
           <!-- Search & Filters -->
           <div class="staff-list-controls staff-list-controls-row">
             <div class="staff-search-box" style="flex:1;min-width:240px">
-              <span class="search-ico">🔍</span>
+              <span class="search-ico">${icon('search')}</span>
               <input type="search" class="input staff-search-input" id="guest-search" placeholder="ค้นหาชื่อ-นามสกุล, เบอร์โทรศัพท์ หรือรหัสตั๋ว MF-xxxx..." value="${esc(searchQuery)}" />
             </div>
 
             <div class="staff-filter-pills" id="guest-filters">
-              <button type="button" class="filter-pill ${filterMode === 'all' ? 'active' : ''}" data-filter="all">ทั้งหมด (<span id="flt-cnt-all">${registrations.length}</span>)</button>
-              <button type="button" class="filter-pill ${filterMode === 'checked_in' ? 'active' : ''}" data-filter="checked_in">✅ เช็กอินเข้างานแล้ว (<span id="flt-cnt-chk">${registrations.filter(r => r.status === 'checked_in').length}</span>)</button>
-              <button type="button" class="filter-pill ${filterMode === 'pending' ? 'active' : ''}" data-filter="pending">⏳ รอเช็กอิน (<span id="flt-cnt-pend">${registrations.filter(r => r.status !== 'checked_in').length}</span>)</button>
+              <button type="button" class="filter-pill ${filterMode === 'all' ? 'active' : ''}" data-filter="all">${icon('users')} ทั้งหมด (<span id="flt-cnt-all">${registrations.length}</span>)</button>
+              <button type="button" class="filter-pill ${filterMode === 'checked_in' ? 'active' : ''}" data-filter="checked_in">${icon('check')} เช็กอินเข้างานแล้ว (<span id="flt-cnt-chk">${registrations.filter(r => r.status === 'checked_in').length}</span>)</button>
+              <button type="button" class="filter-pill ${filterMode === 'pending' ? 'active' : ''}" data-filter="pending">${icon('clock')} รอเช็กอิน (<span id="flt-cnt-pend">${registrations.filter(r => r.status !== 'checked_in').length}</span>)</button>
             </div>
           </div>
 
@@ -326,7 +326,7 @@ export async function render(el) {
           <!-- Footer utilities -->
           <div class="staff-list-foot">
             <span style="font-size:12px;color:var(--muted)">💡 คลิกปุ่มสถานะในตารางเพื่อสลับ "เช็กอินแล้ว / รอเช็กอิน" ได้ทันที</span>
-            <button type="button" class="btn btn-sm btn-ghost" id="btn-reset-all" style="color:var(--rose-d);font-size:12px">🗑️ ล้างข้อมูลทั้งหมด</button>
+            <button type="button" class="btn btn-sm btn-ghost" id="btn-reset-all" style="color:var(--rose-d);font-size:12px">${icon('trash')} ล้างข้อมูลทั้งหมด</button>
           </div>
         </div>
       </section>
@@ -388,7 +388,7 @@ export async function render(el) {
           <tr>
             <th style="width:70px;text-align:center">ลำดับ</th>
             <th>รหัสตั๋ว</th>
-            <th>ชื่อ - นามสกุล</th>
+            <th>ชื่อเล่น,ชื่อในวงการ,ชื่อทางการ</th>
             <th>เบอร์โทรศัพท์</th>
             <th>เวลาที่ลงทะเบียน</th>
             <th>เวลาเช็กอิน</th>
@@ -411,11 +411,11 @@ export async function render(el) {
                 </td>
                 <td>
                   <button type="button" class="status-toggle-btn ${isChecked ? 'checked' : 'pending'}" data-toggle-id="${esc(r.id)}" title="คลิกเพื่อเปลี่ยนสถานะเช็กอิน">
-                    ${isChecked ? '✅ เข้าร่วมงานแล้ว' : '⏳ รอเช็กอิน (กดเพื่อเช็กอิน)'}
+                    ${isChecked ? `${icon('check', 'fill')} เข้าร่วมงานแล้ว` : `${icon('clock')} รอเช็กอิน (กดเพื่อเช็กอิน)`}
                   </button>
                 </td>
                 <td style="text-align:right">
-                  <button type="button" class="btn-icon-del" data-del-id="${esc(r.id)}" data-del-name="${esc(r.fullName)}" title="ลบรายชื่อนี้">✕</button>
+                  <button type="button" class="btn-icon-del" data-del-id="${esc(r.id)}" data-del-name="${esc(r.fullName)}" title="ลบรายชื่อนี้">${icon('close')}</button>
                 </td>
               </tr>
             `;

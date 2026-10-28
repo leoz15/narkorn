@@ -261,7 +261,7 @@ export async function registerGuest({
   const isOnsite = source === 'onsite';
   const partySize = Math.max(1, Math.min(50, Number(pax) || 1));
 
-  if (name.length < 2) throw new ApiError('VALIDATION', 'กรุณากรอกชื่อ-นามสกุล');
+  if (name.length < 2) throw new ApiError('VALIDATION', 'กรุณากรอกชื่อเล่น,ชื่อในวงการ,ชื่อทางการ');
   if (!isOnsite || tel.length > 0) {
     if (!isValidThaiPhone(tel)) throw new ApiError('VALIDATION', 'รูปแบบเบอร์โทรศัพท์ไม่ถูกต้อง');
   }

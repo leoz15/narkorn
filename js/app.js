@@ -2,11 +2,25 @@
  * MERIT FEST — SPA router
  * Each page module exports `render(el, params)` and may return a cleanup fn.
  */
-import { $$ } from './ui.js';
+import { $$, icon } from './ui.js';
 import './firebase.js';
 import { recordVisit } from './store.js';
 
 recordVisit();
+
+// 1. แถบเมนูบนและแถบเมนูมือถือด้านล่าง: Outline ในสถานะปกติ -> Filled เมื่อ active
+const navCheckin = document.getElementById('nav-checkin');
+if (navCheckin) navCheckin.innerHTML = `${icon('ticket')} Checkin`;
+const tabIcons = { home: 'home', schedule: 'calendar', polaroid: 'camera', checkin: 'ticket', map: 'map' };
+Object.entries(tabIcons).forEach(([route, icoName]) => {
+  const span = document.querySelector(`#tab-${route} > span`);
+  if (span) span.innerHTML = icon(icoName);
+  const navLink = document.getElementById(`nav-${route}`);
+  if (navLink && route !== 'checkin') {
+    const label = navLink.textContent.trim();
+    navLink.innerHTML = `${icon(icoName)} <span>${label}</span>`;
+  }
+});
 
 const routes = {
   home: () => import('./pages/home.js'),

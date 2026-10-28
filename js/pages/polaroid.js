@@ -1,4 +1,4 @@
-import { toast, footer } from '../ui.js';
+import { toast, footer, icon } from '../ui.js';
 
 /* ------------------------------------------------------------------
  * Config
@@ -17,10 +17,8 @@ const T = {
   title2: 'ขอลาบวช',
   name: 'ธนกร วงศ์คำภู (มังกร)',
   date: 'วันอาทิตย์ที่ 22 พฤศจิกายน 2569',
-  place: 'สถานที่ : วัดลานคา ต.บางปลาม้า อ.บางปลาม้า จ.สุพรรณบุรี',
-  userCaption: 'มาร่วมทำบุญกันนะ สาธุ',
-  brand: 'Merit Fest',
-  brandSub: 'งานบวช & ดนตรี',
+  place: 'วัดลานคา ต.บางปลาม้า จ.สุพรรณบุรี',
+  userCaption: 'สาธุ 🙏',
 };
 
 /* 50 คำคม (สุ่มอัตโนมัติเมื่อกด สาธุ) */
@@ -107,7 +105,7 @@ export async function render(el) {
               <strong>ถ่ายภาพกับพระ</strong>
               <small>ถ่ายรูป หรือ เลือกจากคลังภาพ</small>
             </span>
-            <span class="pol-cta-ico" aria-hidden="true">📷</span>
+            <span class="pol-cta-ico" aria-hidden="true">${icon('camera', 'fill')}</span>
           </button>
         </div>
       </div>
@@ -128,8 +126,8 @@ export async function render(el) {
     <div class="pol-result" id="pol-result" hidden>
       <img id="result-img" class="pol-result-img" alt="ภาพโพลารอยด์ที่ระลึกงานบวช" />
       <div class="pol-result-actions">
-        <button class="btn btn-primary btn-lg" id="btn-save" type="button">💾 บันทึกภาพ</button>
-        <button class="btn btn-lg" id="btn-share" type="button">📤 แชร์</button>
+        <button class="btn btn-primary btn-lg" id="btn-save" type="button">${icon('download', 'fill')} บันทึกภาพ</button>
+        <button class="btn btn-lg" id="btn-share" type="button">${icon('share')} แชร์</button>
       </div>
     </div>
 
@@ -151,9 +149,9 @@ export async function render(el) {
           <div class="cam-flash" id="cam-flash"></div>
         </div>
         <div class="cam-footer">
-          <button class="cam-side" id="btn-gallery" type="button">🖼️<span>คลังภาพ</span></button>
+          <button class="cam-side" id="btn-gallery" type="button">${icon('image')}<span>คลังภาพ</span></button>
           <button class="shutter-btn" id="btn-shutter" type="button" aria-label="ถ่ายรูป"></button>
-          <button class="cam-side" id="btn-flip" type="button">🔄<span>สลับกล้อง</span></button>
+          <button class="cam-side" id="btn-flip" type="button">${icon('refresh')}<span>สลับกล้อง</span></button>
         </div>
       </div>
     </div>
@@ -417,38 +415,6 @@ function drawHeader(ctx) {
   ctx.quadraticCurveTo(x + 120, yn + 10, x + 250, yn + 20);
   ctx.stroke();
 
-  // Info card: date + place
-  const cx = 40, cw = 410, padX = 20;
-  let cy = yn + 44;
-  ctx.font = `400 20px ${PROMPT}`;
-  const placeLines = wrapLines(ctx, T.place, cw - padX * 2);
-  const ch = 22 + 30 + 14 + placeLines.length * 30 + 12;
-
-  ctx.fillStyle = 'rgba(255,255,255,0.62)';
-  roundRect(ctx, cx, cy, cw, ch, 18);
-  ctx.fill();
-  ctx.setLineDash([6, 5]);
-  ctx.strokeStyle = 'rgba(212,162,76,0.6)';
-  ctx.lineWidth = 1.5;
-  ctx.stroke();
-  ctx.setLineDash([]);
-
-  let ty = cy + 22 + 22;
-  ctx.font = `600 22px ${PROMPT}`;
-  ctx.fillStyle = '#4A3428';
-  ctx.fillText(fitText(ctx, T.date, cw - padX * 2), cx + padX, ty);
-
-  ty += 14;
-  ctx.strokeStyle = 'rgba(122,95,80,0.25)';
-  ctx.lineWidth = 1;
-  ctx.beginPath();
-  ctx.moveTo(cx + padX, ty); ctx.lineTo(cx + cw - padX, ty);
-  ctx.stroke();
-
-  ctx.font = `400 20px ${PROMPT}`;
-  ctx.fillStyle = '#7A5F50';
-  placeLines.forEach((line, i) => ctx.fillText(line, cx + padX, ty + 30 + i * 30));
-
   ctx.restore();
 }
 
@@ -527,8 +493,8 @@ function drawPolaroid(ctx, img, o) {
 
 function drawFooter(ctx) {
   ctx.save();
-  const x = 56, y = 1140;
-  // pin
+  const x = 56, y = 1136;
+  // pin / checkin icon
   ctx.fillStyle = '#8A6A58';
   ctx.beginPath();
   ctx.arc(x, y - 6, 12, Math.PI, 0);
@@ -540,11 +506,11 @@ function drawFooter(ctx) {
 
   ctx.textAlign = 'left';
   ctx.fillStyle = '#4A3428';
-  ctx.font = `600 24px ${PROMPT}`;
-  ctx.fillText(T.brand, x + 24, y - 4);
+  ctx.font = `600 21px ${PROMPT}`;
+  ctx.fillText(T.date, x + 24, y - 4);
   ctx.fillStyle = '#7A5F50';
-  ctx.font = `500 19px ${MALI}`;
-  ctx.fillText(T.brandSub, x + 24, y + 22);
+  ctx.font = `400 17px ${PROMPT}`;
+  ctx.fillText(T.place, x + 24, y + 22);
   ctx.restore();
 }
 
