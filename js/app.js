@@ -18,7 +18,7 @@ const routes = {
   staff: () => import('./pages/staff.js'),
   schedule: () => import('./pages/schedule.js'),
   gift: () => import('./pages/soon.js').then(m => ({ render: (el) => m.render(el, 'gift') })),
-  admin: () => import('./pages/soon.js').then(m => ({ render: (el) => m.render(el, 'admin') })),
+  admin: () => import('./pages/staff.js'),
 };
 
 const app = document.getElementById('app');

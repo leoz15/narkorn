@@ -222,9 +222,20 @@ window.addEventListener('storage', e => {
 
 function computeStats() {
   const regs = read(KEY.regs, []).filter(r => r.status !== 'cancelled');
+  const sumPax = list => list.reduce((acc, r) => acc + (Number(r.pax) || 1), 0);
+  const checkedList = regs.filter(r => r.checkedInAt);
+  const onlineList = regs.filter(r => (r.source || 'online') === 'online');
+  const onsiteList = regs.filter(r => r.source === 'onsite');
+  const pendingList = regs.filter(r => !r.checkedInAt);
+
   return {
-    registered: regs.length,
-    checkedIn: regs.filter(r => r.checkedInAt).length,
+    registered: sumPax(regs),
+    registeredRecords: regs.length,
+    checkedIn: sumPax(checkedList),
+    checkedInRecords: checkedList.length,
+    pending: sumPax(pendingList),
+    online: sumPax(onlineList),
+    onsite: sumPax(onsiteList),
     visitors: getVisitorCount(),
     target: EVENT.target,
   };
@@ -240,32 +251,45 @@ export class ApiError extends Error {
   constructor(code, message, data) { super(message); this.code = code; this.data = data; }
 }
 
-export async function registerGuest({ fullName, phone, consent, source = 'online', staff = null }) {
-  await delay(450);
+export async function registerGuest({
+  fullName, phone, consent, source = 'online', staff = null,
+  autoCheckIn = false, pax = 1, note = ''
+}) {
+  await delay(300);
   const name = String(fullName || '').trim().replace(/\s+/g, ' ');
   const tel = normalizePhone(phone);
-  if (name.length < 3) throw new ApiError('VALIDATION', 'กรุณากรอกชื่อ-นามสกุล');
-  if (!isValidThaiPhone(tel)) throw new ApiError('VALIDATION', 'รูปแบบเบอร์โทรศัพท์ไม่ถูกต้อง');
-  if (!consent) throw new ApiError('VALIDATION', 'กรุณายอมรับเงื่อนไขการใช้ข้อมูล');
+  const isOnsite = source === 'onsite';
+  const partySize = Math.max(1, Math.min(50, Number(pax) || 1));
+
+  if (name.length < 2) throw new ApiError('VALIDATION', 'กรุณากรอกชื่อ-นามสกุล');
+  if (!isOnsite || tel.length > 0) {
+    if (!isValidThaiPhone(tel)) throw new ApiError('VALIDATION', 'รูปแบบเบอร์โทรศัพท์ไม่ถูกต้อง');
+  }
+  if (!isOnsite && !consent) throw new ApiError('VALIDATION', 'กรุณายอมรับเงื่อนไขการใช้ข้อมูล');
 
   const regs = read(KEY.regs, []);
-  const dup = regs.find(r => r.phone === tel && r.status !== 'cancelled');
-  if (dup) throw new ApiError('DUPLICATE', 'เบอร์นี้ลงทะเบียนไว้แล้ว', publicView(dup));
+  if (tel) {
+    const dup = regs.find(r => r.phone === tel && r.status !== 'cancelled');
+    if (dup) throw new ApiError('DUPLICATE', 'เบอร์นี้ลงทะเบียนไว้แล้ว', publicView(dup));
+  }
 
+  const now = new Date().toISOString();
   const reg = {
     id: nextRegId(),
     token: secureToken(),
     fullName: name,
     phone: tel,
+    pax: partySize,
+    note: String(note || '').trim(),
     source,
     status: 'registered',
-    createdAt: new Date().toISOString(),
-    checkedInAt: null,
-    checkedInBy: null,
+    createdAt: now,
+    checkedInAt: autoCheckIn ? now : null,
+    checkedInBy: autoCheckIn ? (staff || 'staff-onsite') : null,
   };
   regs.push(reg);
   write(KEY.regs, regs);
-  audit('registration.create', { id: reg.id, source, staff });
+  audit('registration.create', { id: reg.id, source, staff, pax: partySize, autoCheckIn });
   emit();
   return publicView(reg);
 }
@@ -273,8 +297,18 @@ export async function registerGuest({ fullName, phone, consent, source = 'online
 /** What the guest's device is allowed to see/keep. */
 function publicView(r) {
   return {
-    id: r.id, token: r.token, fullName: r.fullName, phoneMasked: maskPhone(r.phone),
-    status: r.checkedInAt ? 'checked_in' : r.status, createdAt: r.createdAt, checkedInAt: r.checkedInAt,
+    id: r.id,
+    token: r.token,
+    fullName: r.fullName,
+    phone: r.phone || '',
+    phoneMasked: r.phone ? maskPhone(r.phone) : '-',
+    pax: Number(r.pax) || 1,
+    note: r.note || '',
+    source: r.source || 'online',
+    status: r.checkedInAt ? 'checked_in' : r.status,
+    createdAt: r.createdAt,
+    checkedInAt: r.checkedInAt,
+    checkedInBy: r.checkedInBy || null,
   };
 }
 
@@ -308,9 +342,41 @@ export async function checkIn(token, staff = 'staff-demo') {
   return { result: 'ok', registration: publicView(r) };
 }
 
-export async function listRegistrations() {
+export async function toggleCheckIn(id, staff = 'staff') {
   await delay(150);
-  return read(KEY.regs, []).slice().reverse().map(r => ({ ...publicView(r), source: r.source }));
+  const regs = read(KEY.regs, []);
+  const r = regs.find(x => x.id === id);
+  if (!r) return null;
+  if (r.checkedInAt) {
+    r.checkedInAt = null;
+    r.checkedInBy = null;
+    audit('checkin.undo', { id: r.id, staff });
+  } else {
+    r.checkedInAt = new Date().toISOString();
+    r.checkedInBy = staff;
+    audit('checkin.success', { id: r.id, staff });
+  }
+  write(KEY.regs, regs);
+  emit();
+  return publicView(r);
+}
+
+export async function deleteRegistration(id, staff = 'staff') {
+  await delay(150);
+  const regs = read(KEY.regs, []).filter(x => x.id !== id);
+  write(KEY.regs, regs);
+  audit('registration.delete', { id, staff });
+  emit();
+  return true;
+}
+
+export async function listRegistrations() {
+  await delay(100);
+  return read(KEY.regs, [])
+    .filter(r => r.status !== 'cancelled')
+    .slice()
+    .reverse()
+    .map(r => publicView(r));
 }
 export const getAuditLog = async () => read(KEY.audit, []);
 
@@ -343,7 +409,7 @@ export async function seedDemo(n = 40) {
     regs.push({
       id: nextRegId(), token: secureToken(),
       fullName: `${DEMO_FIRST[i % DEMO_FIRST.length]} ${DEMO_LAST[(i * 7) % DEMO_LAST.length]}`,
-      phone, source: Math.random() < 0.8 ? 'online' : 'onsite', status: 'registered', demo: true,
+      phone, source: 'online', status: 'registered', demo: true,
       createdAt: new Date(Date.now() - Math.random() * 6e8).toISOString(),
       checkedInAt: checked ? new Date().toISOString() : null, checkedInBy: checked ? 'seed' : null,
     });
