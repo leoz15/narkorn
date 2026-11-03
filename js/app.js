@@ -11,7 +11,7 @@ recordVisit();
 // 1. แถบเมนูบนและแถบเมนูมือถือด้านล่าง: Outline ในสถานะปกติ -> Filled เมื่อ active
 const navCheckin = document.getElementById('nav-checkin');
 if (navCheckin) navCheckin.innerHTML = `${icon('ticket')} Checkin`;
-const tabIcons = { home: 'home', schedule: 'calendar', polaroid: 'camera', checkin: 'ticket', map: 'map' };
+const tabIcons = { schedule: 'calendar', polaroid: 'camera', checkin: 'ticket', map: 'map' };
 Object.entries(tabIcons).forEach(([route, icoName]) => {
   const span = document.querySelector(`#tab-${route} > span`);
   if (span) span.innerHTML = icon(icoName);
@@ -23,14 +23,14 @@ Object.entries(tabIcons).forEach(([route, icoName]) => {
 });
 
 const routes = {
-  home: () => import('./pages/home.js'),
+  home: () => import('./pages/schedule.js'),
+  schedule: () => import('./pages/schedule.js'),
   checkin: () => import('./pages/checkin.js'),
   register: () => import('./pages/checkin.js'),
   ticket: () => import('./pages/checkin.js'),
   map: () => import('./pages/map.js'),
   polaroid: () => import('./pages/polaroid.js'),
   staff: () => import('./pages/staff.js'),
-  schedule: () => import('./pages/schedule.js'),
   gift: () => import('./pages/soon.js').then(m => ({ render: (el) => m.render(el, 'gift') })),
   admin: () => import('./pages/staff.js'),
 };
@@ -42,8 +42,9 @@ let navToken = 0;
 function parseHash() {
   const h = location.hash.replace(/^#\/?/, '');
   const [path, query = ''] = h.split('?');
-  const name = path.split('/')[0] || 'home';
-  return { name: routes[name] ? name : 'home', params: Object.fromEntries(new URLSearchParams(query)) };
+  const raw = path.split('/')[0];
+  const name = (!raw || raw === 'home') ? 'schedule' : (routes[raw] ? raw : 'schedule');
+  return { name, params: Object.fromEntries(new URLSearchParams(query)) };
 }
 
 async function navigate() {
@@ -52,7 +53,7 @@ async function navigate() {
   if (typeof cleanup === 'function') { try { cleanup(); } catch (e) { console.warn(e); } }
   cleanup = null;
 
-  const routeKey = (name === 'register' || name === 'ticket') ? 'checkin' : name;
+  const routeKey = (name === 'register' || name === 'ticket') ? 'checkin' : (name === 'home' ? 'schedule' : name);
   $$('[data-route]').forEach(a => a.classList.toggle('active', a.dataset.route === routeKey));
   document.body.dataset.route = routeKey;
   document.getElementById('main-nav')?.classList.remove('open');

@@ -17,12 +17,15 @@ export const ME_STATE = Object.freeze({
   DANCING: 'DANCING',
   WALKING_TO_DINING: 'WALKING_TO_DINING',
   EATING: 'EATING',
+  WALKING_TO_LUCKY: 'WALKING_TO_LUCKY',
+  LUCKY_DRAWING: 'LUCKY_DRAWING',
 });
 
 const ACTIVITY = {
   church: { walk: ME_STATE.WALKING_TO_CHURCH, act: ME_STATE.PRAYING, clip: 'pray', text: '🙏 สาธุ', border: '#e3b14b' },
   stage: { walk: ME_STATE.WALKING_TO_STAGE, act: ME_STATE.DANCING, clip: 'dance', text: '🎶 ม่วนคักๆ', border: '#8a6fd1' },
   dining: { walk: ME_STATE.WALKING_TO_DINING, act: ME_STATE.EATING, clip: 'eat', text: '🍚 อนุโมทนาบุญ', border: '#7fa36b' },
+  lucky: { walk: ME_STATE.WALKING_TO_LUCKY, act: ME_STATE.LUCKY_DRAWING, clip: 'reach', text: '⭐ สอยดาว', border: '#f5a623' },
 };
 
 /* =====================================================================
@@ -247,7 +250,23 @@ function buildMe(disposables) {
   mesh(new THREE.SphereGeometry(0.035, 6, 4), '#c9c9d2', spoon, 0, -0.15, 0).scale.set(1, 0.5, 1.3);
   bowl.visible = spoon.visible = false;
 
-  return { root, body, props: { bowl, spoon } };
+  // bamboo hook pole for Lucky Star harvest
+  const hookPole = new THREE.Group();
+  hookPole.position.set(0, -0.22, 0.05);
+  hookPole.rotation.set(-Math.PI / 2 + 0.15, 0, 0);
+  foreR.add(hookPole);
+  mesh(new THREE.CylinderGeometry(0.012, 0.015, 1.35, 6), '#cfa15d', hookPole, 0, 0.67, 0);
+  for (let ny = 0.25; ny <= 1.25; ny += 0.3) {
+    mesh(new THREE.CylinderGeometry(0.016, 0.016, 0.02, 6), '#8a5a2b', hookPole, 0, ny, 0);
+  }
+  const hookTip = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.01, 5, 12, Math.PI * 1.3), new THREE.MeshStandardMaterial({ color: '#e0b068', roughness: 0.4 }));
+  hookTip.position.set(0, 1.33, 0.02);
+  hookTip.rotation.set(0, Math.PI / 2, -Math.PI / 2);
+  hookPole.add(hookTip);
+  disposables.push(hookTip.geometry, hookTip.material);
+  hookPole.visible = false;
+
+  return { root, body, props: { bowl, spoon, hookPole } };
 }
 
 /* =====================================================================
@@ -338,7 +357,51 @@ function buildClips() {
   ];
   const eat = makeClip('eat', 2.4, eatKeys(SIT));
   const eatStand = makeClip('eatStand', 2.4, eatKeys({}));
-  return { idle, walk, dance, pray, eat, eatStand };
+
+  // reach: look up, raise arms up to reach for star, pull down, celebrate
+  const reach = makeClip('reach', 3.6, [
+    [0, { me_head: [-0.15, 0, 0] }],
+    [0.7, { me_head: [-0.35, 0, 0], me_armR: [-2.1, 0, -0.2], me_foreR: [-0.35, 0, 0], me_armL: [-1.8, 0, 0.2], me_foreL: [-0.35, 0, 0], me_torso: [-0.05, 0, 0], bodyY: 0.03 }],
+    [1.4, { me_head: [-0.42, 0, 0], me_armR: [-2.85, 0, -0.15], me_foreR: [-0.2, 0, 0], me_armL: [-2.65, 0, 0.2], me_foreL: [-0.3, 0, 0], me_torso: [-0.08, 0, 0], bodyY: 0.06 }],
+    [2.1, { me_head: [-0.38, 0, 0], me_armR: [-2.7, 0, -0.1], me_foreR: [-0.65, 0, 0], me_armL: [-2.5, 0, 0.15], me_foreL: [-0.65, 0, 0], bodyY: 0.04 }],
+    [2.7, { me_head: [0.15, 0, 0], me_armR: [-1.15, 0, 0.15], me_foreR: [-1.35, 0, 0.55], me_armL: [-1.15, 0, -0.15], me_foreL: [-1.35, 0, -0.55], me_torso: [0.08, 0, 0], bodyY: -0.01 }],
+    [3.2, { me_head: [-0.15, 0, 0], me_armR: [-2.55, 0, -0.35], me_foreR: [-0.45, 0, 0], me_armL: [-2.55, 0, 0.35], me_foreL: [-0.45, 0, 0], bodyY: 0.08 }],
+    [3.6, { me_head: [0, 0, 0], me_armR: [0.05, 0, -0.12], me_foreR: [-0.18, 0, 0], me_armL: [0.05, 0, 0.12], me_foreL: [-0.18, 0, 0], bodyY: 0 }],
+  ]);
+
+  // 1. pickupPole: reach down, pick up pole, lift to chest level
+  const pickupPole = makeClip('pickupPole', 0.8, [
+    [0, {}],
+    [0.4, { me_torso: [0.32, 0.1, 0], me_head: [0.25, 0.1, 0], me_armR: [0.85, 0, -0.2], me_foreR: [-0.65, 0, 0], bodyY: -0.05 }],
+    [0.8, { me_torso: [0.05, 0, 0], me_head: [-0.1, 0, 0], me_armR: [-0.95, 0, -0.15], me_foreR: [-1.15, 0, 0], me_armL: [-0.75, 0, 0.2], me_foreL: [-1.2, 0, 0], bodyY: 0.01 }],
+  ]);
+
+  // 2. hookStar: raise pole high overhead towards star, stretching on tiptoes with rhythmic hooking tugs
+  const hookStar = makeClip('hookStar', 1.6, [
+    [0, { me_head: [-0.45, 0, 0], me_armR: [-2.85, 0, -0.15], me_foreR: [-0.2, 0, 0], me_armL: [-2.65, 0, 0.2], me_foreL: [-0.3, 0, 0], me_torso: [-0.08, 0, 0], bodyY: 0.06 }],
+    [0.4, { me_head: [-0.42, 0, 0], me_armR: [-2.65, 0, -0.12], me_foreR: [-0.42, 0, 0], me_armL: [-2.45, 0, 0.18], me_foreL: [-0.45, 0, 0], me_torso: [-0.05, 0, 0], bodyY: 0.03 }],
+    [0.8, { me_head: [-0.48, 0, 0], me_armR: [-2.92, 0, -0.15], me_foreR: [-0.15, 0, 0], me_armL: [-2.72, 0, 0.2], me_foreL: [-0.25, 0, 0], me_torso: [-0.09, 0, 0], bodyY: 0.07 }],
+    [1.2, { me_head: [-0.42, 0, 0], me_armR: [-2.65, 0, -0.12], me_foreR: [-0.4, 0, 0], me_armL: [-2.45, 0, 0.18], me_foreL: [-0.45, 0, 0], me_torso: [-0.05, 0, 0], bodyY: 0.03 }],
+    [1.6, { me_head: [-0.45, 0, 0], me_armR: [-2.8, 0, -0.15], me_foreR: [-0.25, 0, 0], me_armL: [-2.6, 0, 0.2], me_foreL: [-0.3, 0, 0], me_torso: [-0.08, 0, 0], bodyY: 0.05 }],
+  ]);
+
+  // 3. catchStar: lower pole, cup hands together to catch the falling star
+  const catchStar = makeClip('catchStar', 0.9, [
+    [0, { me_head: [-0.35, 0, 0], me_armR: [-1.8, 0, -0.1], me_foreR: [-0.8, 0, 0], me_armL: [-1.8, 0, 0.1], me_foreL: [-0.8, 0, 0] }],
+    [0.5, { me_head: [0.15, 0, 0], me_armR: [-0.75, 0, -0.18], me_foreR: [-1.35, 0, -0.55], me_armL: [-0.75, 0, 0.18], me_foreL: [-1.35, 0, 0.55], me_torso: [0.08, 0, 0], bodyY: -0.02 }],
+    [0.9, { me_head: [0.12, 0, 0], me_armR: [-0.72, 0, -0.18], me_foreR: [-1.35, 0, -0.55], me_armL: [-0.72, 0, 0.18], me_foreL: [-1.35, 0, 0.55], me_torso: [0.06, 0, 0], bodyY: -0.01 }],
+  ]);
+
+  // 4. celebrate: jumping bounce with both arms pumped high in victory
+  const celebrate = makeClip('celebrate', 1.2, [
+    [0, { me_head: [-0.15, 0, 0], me_armR: [-1.2, 0, -0.2], me_foreR: [-0.8, 0, 0], me_armL: [-1.2, 0, 0.2], me_foreL: [-0.8, 0, 0], bodyY: 0.01 }],
+    [0.35, { me_head: [-0.3, 0, 0], me_armR: [-2.75, 0, -0.45], me_foreR: [-0.25, 0, 0], me_armL: [-2.75, 0, 0.45], me_foreL: [-0.25, 0, 0], bodyY: 0.11 }],
+    [0.65, { me_head: [0.1, 0, 0], me_armR: [-1.8, 0, -0.25], me_foreR: [-0.7, 0, 0], me_armL: [-1.8, 0, 0.25], me_foreL: [-0.7, 0, 0], bodyY: -0.03 }],
+    [0.95, { me_head: [-0.25, 0, 0], me_armR: [-2.65, 0, -0.4], me_foreR: [-0.25, 0, 0], me_armL: [-2.65, 0, 0.4], me_foreL: [-0.25, 0, 0], bodyY: 0.09 }],
+    [1.2, { me_head: [0, 0, 0], me_armR: [0.05, 0, -0.12], me_foreR: [-0.18, 0, 0], me_armL: [0.05, 0, 0.12], me_foreL: [-0.18, 0, 0], bodyY: 0 }],
+  ]);
+
+  return { idle, walk, dance, pray, eat, eatStand, reach, pickupPole, hookStar, catchStar, celebrate };
 }
 
 /* =====================================================================
@@ -470,6 +533,7 @@ export function createMe({ scene, nav, groundY, start, startFace = Math.PI * 0.7
     me.kind = target.kind; me.key = target.key; me.target = target;
     me.path = path; me.wp = 1; me.arrived = false; me.seated = false;
     props.bowl.visible = props.spoon.visible = false;
+    props.hookPole.visible = false;
     hideBubble();
     dest.position.set(target.x, groundY(target.x, target.z) + 0.03, target.z); dest.visible = true;
     // stand up first if seated, then walk
@@ -488,6 +552,9 @@ export function createMe({ scene, nav, groundY, start, startFace = Math.PI * 0.7
       play(t.sit ? 'eat' : 'eatStand', 0.45);
     } else if (t.kind === 'stage') {
       play('dance', 0.35, me.elapsed);   // phase-lock to the musicians' beat
+    } else if (t.kind === 'lucky') {
+      play('idle', 0.25);
+      t.onArrive?.();
     } else {
       play(a.clip, 0.4);
     }
@@ -562,11 +629,24 @@ export function createMe({ scene, nav, groundY, start, startFace = Math.PI * 0.7
     _v.set(me.x, me.y, me.z);
   }
 
+  function resetToIdle() {
+    me.kind = null; me.key = null; me.target = null;
+    me.path = null; me.arrived = false; me.seated = false;
+    props.bowl.visible = props.spoon.visible = false;
+    hideBubble();
+    dest.visible = false;
+    play('idle', 0.35);
+    setState(ME_STATE.IDLE);
+  }
+
   return {
     get x() { return me.x; }, get y() { return me.y; }, get z() { return me.z; }, get state() { return me.state; },
     get kind() { return me.kind; }, get key() { return me.key; }, get target() { return me.target; },
     get position() { return _v.set(me.x, me.y, me.z); },
-    goTo, update, setName,
+    goTo, update, setName, resetToIdle,
+    showBubble(kind = me.kind) { showBubble(kind); },
+    playAction(clipName, fade = 0.3) { play(clipName, fade); },
+    setHoldingPole(v) { props.hookPole.visible = !!v; },
     dispose() {
       mixer.stopAllAction(); mixer.uncacheRoot(root);
       scene.remove(root, ring, dest, chip, bubble);

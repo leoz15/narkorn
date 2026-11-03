@@ -70,5 +70,5 @@ export function downloadDataUrl(dataUrl, filename) {
 export const footer = () => `
   <footer class="footer container">
     <p class="hand">ขอให้ทุกก้าวของชีวิต เต็มไปด้วยความสุขและบุญกุศล 🪷</p>
-    <p>MERIT FEST · งานบวช & ดนตรี · 22 พ.ย. 2569 &nbsp;·&nbsp; <a href="#/staff" id="footer-staff">สำหรับเจ้าหน้าที่</a></p>
+    <p>22 พฤศจิกา 2569 ขอลาบวช &nbsp;·&nbsp; <a href="#/staff" id="footer-staff">สำหรับเจ้าหน้าที่</a></p>
   </footer>`;

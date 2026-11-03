@@ -3,6 +3,7 @@ import {
   toggleCheckIn, deleteRegistration, seedDemo, resetAll
 } from '../store.js';
 import { esc, toast, fmtTime, countUp, footer, icon } from '../ui.js';
+import { renderLuckyAdmin } from './staff-lucky.js';
 
 const STAFF_SESSION_KEY = 'mf.staff.session.v1';
 const STAFF_PIN_KEY = 'mf.staff.pin.v1';
@@ -45,9 +46,12 @@ export async function render(el) {
   let filterMode = 'all'; // 'all' | 'checked_in' | 'pending'
   let offStats = null;
   let keyCleanup = null;
+  let activeTab = 'guests'; // 'guests' | 'lucky'
+  let lucky = null;         // Lucky Star admin panel handle
 
   const mount = async () => {
     if (keyCleanup) { keyCleanup(); keyCleanup = null; }
+    unmountLucky();
     if (!session) {
       renderLogin();
     } else {
@@ -212,6 +216,15 @@ export async function render(el) {
           </div>
         </div>
 
+        <!-- Section tabs -->
+        <div class="staff-tabs" id="staff-tabs" role="tablist">
+          <button type="button" class="staff-tab ${activeTab === 'guests' ? 'active' : ''}" data-tab="guests" role="tab">${icon('users')} ผู้ลงทะเบียน</button>
+          <button type="button" class="staff-tab ${activeTab === 'lucky' ? 'active' : ''}" data-tab="lucky" role="tab">⭐ Lucky Star · สอยดาว</button>
+        </div>
+
+        <div id="panel-lucky" ${activeTab === 'lucky' ? '' : 'hidden'}></div>
+        <div id="panel-guests" ${activeTab === 'guests' ? '' : 'hidden'}>
+
         <!-- LIVE DASHBOARD KPI CARDS -->
         <div class="staff-kpi-grid">
           <div class="card staff-kpi-card kpi-primary">
@@ -329,12 +342,23 @@ export async function render(el) {
             <button type="button" class="btn btn-sm btn-ghost" id="btn-reset-all" style="color:var(--rose-d);font-size:12px">${icon('trash')} ล้างข้อมูลทั้งหมด</button>
           </div>
         </div>
+        </div><!-- /panel-guests -->
       </section>
       ${footer()}
     `;
 
     bindDashboardEvents();
     renderGuestTable();
+    if (activeTab === 'lucky') mountLucky();
+  }
+
+  function mountLucky() {
+    if (lucky) return;
+    const host = el.querySelector('#panel-lucky');
+    if (host) lucky = renderLuckyAdmin(host, session);
+  }
+  function unmountLucky() {
+    if (lucky) { lucky.cleanup(); lucky = null; }
   }
 
   /* =========================================================
@@ -456,6 +480,17 @@ export async function render(el) {
      EVENT BINDINGS FOR DASHBOARD
      ========================================================= */
   function bindDashboardEvents() {
+    // Section tabs
+    el.querySelector('#staff-tabs')?.addEventListener('click', (e) => {
+      const tab = e.target.closest('[data-tab]');
+      if (!tab || tab.dataset.tab === activeTab) return;
+      activeTab = tab.dataset.tab;
+      el.querySelectorAll('#staff-tabs .staff-tab').forEach(b => b.classList.toggle('active', b === tab));
+      el.querySelector('#panel-guests').hidden = activeTab !== 'guests';
+      el.querySelector('#panel-lucky').hidden = activeTab !== 'lucky';
+      if (activeTab === 'lucky') { mountLucky(); lucky?.refresh(); }
+    });
+
     // Logout
     el.querySelector('#btn-logout')?.addEventListener('click', () => {
       clearStaffSession();
@@ -570,10 +605,12 @@ export async function render(el) {
     updateDashboardNumbers(newStats);
     registrations = await listRegistrations();
     renderGuestTable();
+    if (lucky && activeTab === 'lucky') lucky.refresh();
   });
 
   return () => {
     if (keyCleanup) keyCleanup();
     if (offStats) offStats();
+    unmountLucky();
   };
 }

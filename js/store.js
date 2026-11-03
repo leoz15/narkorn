@@ -29,6 +29,9 @@ export const EVENT = {
   fullNameTh: 'นายธนกร วงศ์คำภู (นาคมังกร)',
   date: '2026-11-22T09:00:00+07:00',
   dateEnd: '2026-11-22T17:00:00+07:00',
+  /** Lucky Star เปิดให้เล่นทั้งวันตามปฏิทินเขตเวลาไทย (YYYY-MM-DD, Asia/Bangkok) */
+  luckyStarDate: '2026-11-22',
+  luckyStarDateLabel: '22 พฤศจิกายน 2026',
   dateTh: 'วันอาทิตย์ที่ 22 พฤศจิกายน 2569',
   venue: 'พัทธสีมา วัดลานคา ต.บางปลาม้า อ.บางปลาม้า จ.สุพรรณบุรี',
   templeName: 'วัดลานคา',
@@ -132,6 +135,10 @@ const KEY = {
   monk: 'mf.monkPhoto.v1',
   seq: 'mf.seq.v1',
   visitors: 'mf.visitors.v1',
+  lsPrizes: 'mf.lucky.prizes.v1',
+  lsPlays: 'mf.lucky.plays.v1',
+  lsConfig: 'mf.lucky.config.v1',
+  lsSeq: 'mf.lucky.seq.v1',
 };
 
 const DEFAULT_QUOTES = [
@@ -213,12 +220,14 @@ function emit() {
   channel?.postMessage({ type: 'stats' });
 }
 channel && (channel.onmessage = () => { const s = computeStats(); listeners.forEach(fn => fn(s)); });
-window.addEventListener('storage', e => {
-  if (e.key === KEY.regs || e.key === KEY.visitors) {
-    const s = computeStats();
-    listeners.forEach(fn => fn(s));
-  }
-});
+if (typeof window !== 'undefined') {
+  window.addEventListener('storage', e => {
+    if (e.key === KEY.regs || e.key === KEY.visitors || e.key === KEY.lsPlays || e.key === KEY.lsPrizes || e.key === KEY.lsConfig) {
+      const s = computeStats();
+      listeners.forEach(fn => fn(s));
+    }
+  });
+}
 
 function computeStats() {
   const regs = read(KEY.regs, []).filter(r => r.status !== 'cancelled');
@@ -396,6 +405,319 @@ export async function getMyTicket() {
 /* ---------------- Polaroid content (Admin-managed later) ---------------- */
 export async function getQuotes() { return read(KEY.quotes, DEFAULT_QUOTES); }
 export async function getMonkPhoto() { return read(KEY.monk, './assets/monk.jpg'); }
+
+/* ================================================================
+ * Lucky Star — สอยดาว ลุ้นรับรางวัล
+ * ----------------------------------------------------------------
+ * Future endpoints:
+ *   getLuckyWindow()   -> GET  /api/lucky/window
+ *   playLuckyStar()    -> POST /api/lucky/play        (atomic: check-in + draw)
+ *   findClaim()        -> GET  /api/lucky/claims/:code
+ *   redeemPrize()      -> POST /api/lucky/claims/:code/redeem (atomic)
+ *   listPrizes()/savePrize()/deletePrize() -> /api/lucky/prizes
+ *
+ * Draw model = "ตู้ดาว" (star box): the box holds `totalStars` stars,
+ * prize stars = Σ prize.qty, the rest are blanks. Each play removes one
+ * random star from what is left, so prizes can never exceed their qty.
+ *
+ * NOTE: this prototype enforces every rule in the browser (localStorage +
+ * Web Locks across tabs). For multi-device production these rules must
+ * run server-side / in a Firestore transaction — and the date check must
+ * use server time, since the device clock can be changed.
+ * ================================================================ */
+export const LUCKY_QR_PREFIX = 'MFP1:';
+export const luckyQrPayload = code => LUCKY_QR_PREFIX + code;
+export const parseLuckyQr = text => {
+  const t = String(text || '').trim();
+  const raw = t.startsWith(LUCKY_QR_PREFIX) ? t.slice(LUCKY_QR_PREFIX.length) : t;
+  const code = raw.toUpperCase().replace(/[^A-Z0-9]/g, '');
+  return code.length === 8 ? code : null;
+};
+export const formatClaimCode = code => code ? `${code.slice(0, 4)}-${code.slice(4)}` : '';
+
+const DEFAULT_LUCKY_CONFIG = { totalStars: 300, testMode: false };
+const DEFAULT_PRIZES = [
+  { id: 'PZ-01', name: 'พระเครื่องที่ระลึกงานบวช', desc: 'ของที่ระลึกมงคล รุ่นนาคมังกร', emoji: '🪷', image: '', qty: 5 },
+  { id: 'PZ-02', name: 'แก้วน้ำลายมังกร', desc: 'แก้วเก็บความเย็น ลายพิเศษเฉพาะงาน', emoji: '🥤', image: '', qty: 15 },
+  { id: 'PZ-03', name: 'พวงกุญแจดาวนำโชค', desc: 'พวงกุญแจรูปดาวสีทอง', emoji: '⭐', image: '', qty: 30 },
+];
+
+const CLAIM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
+
+function randInt(n) {
+  if (n <= 0) return 0;
+  const buf = new Uint32Array(1);
+  const limit = Math.floor(0x100000000 / n) * n; // rejection sampling → no modulo bias
+  do { crypto.getRandomValues(buf); } while (buf[0] >= limit);
+  return buf[0] % n;
+}
+function claimCode(existing) {
+  let c;
+  do { c = Array.from({ length: 8 }, () => CLAIM_ALPHABET[randInt(CLAIM_ALPHABET.length)]).join(''); }
+  while (existing.has(c));
+  return c;
+}
+function nextPlayId() {
+  const n = (read(KEY.lsSeq, 0) || 0) + 1;
+  write(KEY.lsSeq, n);
+  return 'LS-' + String(n).padStart(4, '0');
+}
+
+/** Run fn exclusively across tabs (Web Locks) — prevents double draws on rapid taps. */
+async function withLuckyLock(fn) {
+  if (navigator.locks?.request) return navigator.locks.request('mf-lucky-star', fn);
+  return fn();
+}
+
+const readPrizes = () => {
+  const p = read(KEY.lsPrizes, null);
+  if (p) return p;
+  write(KEY.lsPrizes, DEFAULT_PRIZES);
+  return DEFAULT_PRIZES.slice();
+};
+const readPlays = () => read(KEY.lsPlays, []);
+
+export function getLuckyConfig() {
+  return { ...DEFAULT_LUCKY_CONFIG, ...read(KEY.lsConfig, {}) };
+}
+export async function saveLuckyConfig(patch, staff = 'staff') {
+  await delay(80);
+  const cfg = { ...getLuckyConfig(), ...patch };
+  cfg.totalStars = Math.max(1, Math.min(100000, Math.round(Number(cfg.totalStars) || DEFAULT_LUCKY_CONFIG.totalStars)));
+  cfg.testMode = !!cfg.testMode;
+  write(KEY.lsConfig, cfg);
+  audit('lucky.config', { staff, ...cfg });
+  emit();
+  return cfg;
+}
+
+/** Current Thai (Asia/Bangkok) calendar date as YYYY-MM-DD. */
+export function bangkokDate(d = new Date()) {
+  return new Intl.DateTimeFormat('en-CA', { timeZone: 'Asia/Bangkok', year: 'numeric', month: '2-digit', day: '2-digit' }).format(d);
+}
+
+/** @returns {{state:'before'|'open'|'after', testMode:boolean, today:string, date:string, label:string}} */
+export function getLuckyWindow() {
+  const cfg = getLuckyConfig();
+  const today = bangkokDate();
+  let state = today < EVENT.luckyStarDate ? 'before' : today > EVENT.luckyStarDate ? 'after' : 'open';
+  if (cfg.testMode) state = 'open';
+  return { state, testMode: cfg.testMode, today, date: EVENT.luckyStarDate, label: EVENT.luckyStarDateLabel };
+}
+
+function prizeStock(prizes, plays) {
+  return prizes.map(p => {
+    const awarded = plays.filter(x => x.prizeId === p.id).length;
+    const redeemed = plays.filter(x => x.prizeId === p.id && x.redeemedAt).length;
+    return { ...p, awarded, redeemed, remaining: Math.max(0, (Number(p.qty) || 0) - awarded) };
+  });
+}
+
+export async function listPrizes() {
+  await delay(60);
+  return prizeStock(readPrizes(), readPlays());
+}
+
+export async function savePrize(input, staff = 'staff') {
+  await delay(120);
+  const name = String(input.name || '').trim();
+  const qty = Math.round(Number(input.qty));
+  if (name.length < 2) throw new ApiError('VALIDATION', 'กรุณากรอกชื่อรางวัล');
+  if (!Number.isFinite(qty) || qty < 0) throw new ApiError('VALIDATION', 'จำนวนรางวัลต้องเป็นตัวเลขตั้งแต่ 0 ขึ้นไป');
+
+  const prizes = readPrizes();
+  const plays = readPlays();
+  const awarded = input.id ? plays.filter(x => x.prizeId === input.id).length : 0;
+  if (qty < awarded) throw new ApiError('VALIDATION', `แจกรางวัลนี้ไปแล้ว ${awarded} ชิ้น ไม่สามารถลดจำนวนให้ต่ำกว่านี้ได้`);
+
+  const data = {
+    name, qty,
+    desc: String(input.desc || '').trim(),
+    emoji: String(input.emoji || '').trim() || '🎁',
+    image: input.image || '',
+  };
+  let prize;
+  const idx = input.id ? prizes.findIndex(p => p.id === input.id) : -1;
+  if (idx >= 0) {
+    prize = prizes[idx] = { ...prizes[idx], ...data, updatedAt: new Date().toISOString() };
+  } else {
+    const max = prizes.reduce((m, p) => Math.max(m, Number(String(p.id).replace(/\D/g, '')) || 0), 0);
+    prize = { id: 'PZ-' + String(max + 1).padStart(2, '0'), ...data, createdAt: new Date().toISOString() };
+    prizes.push(prize);
+  }
+  try { write(KEY.lsPrizes, prizes); }
+  catch { throw new ApiError('STORAGE', 'พื้นที่จัดเก็บเต็ม กรุณาใช้รูปภาพขนาดเล็กลง หรือใช้อีโมจิแทน'); }
+  audit(idx >= 0 ? 'lucky.prize.update' : 'lucky.prize.create', { staff, id: prize.id, qty });
+  emit();
+  return prize;
+}
+
+export async function deletePrize(id, staff = 'staff') {
+  await delay(100);
+  const awarded = readPlays().filter(x => x.prizeId === id).length;
+  if (awarded > 0) throw new ApiError('IN_USE', `รางวัลนี้มีผู้ได้รับแล้ว ${awarded} คน ไม่สามารถลบได้ (ปรับจำนวนแทนได้)`);
+  write(KEY.lsPrizes, readPrizes().filter(p => p.id !== id));
+  audit('lucky.prize.delete', { staff, id });
+  emit();
+  return true;
+}
+
+function playView(p, prizes) {
+  if (!p) return null;
+  const prize = p.prizeId ? prizes.find(x => x.id === p.prizeId) : null;
+  return {
+    id: p.id,
+    regId: p.regId,
+    fullName: p.fullName,
+    result: p.result,               // 'win' | 'none'
+    status: p.result === 'win' ? (p.redeemedAt ? 'redeemed' : 'won') : 'none',
+    prizeId: p.prizeId || null,
+    prize: prize
+      ? { id: prize.id, name: prize.name, desc: prize.desc, emoji: prize.emoji, image: prize.image }
+      : (p.prizeId ? { id: p.prizeId, name: p.prizeName, desc: '', emoji: '🎁', image: '' } : null),
+    claimCode: p.claimCode || null,
+    playedAt: p.playedAt,
+    redeemedAt: p.redeemedAt || null,
+    redeemedBy: p.redeemedBy || null,
+  };
+}
+
+/** Lucky Star result for a registration token (null = not played yet). */
+export async function getLuckyPlay(regToken) {
+  await delay(60);
+  const reg = read(KEY.regs, []).find(r => r.token === regToken);
+  if (!reg) return null;
+  return playView(readPlays().find(p => p.regId === reg.id), readPrizes());
+}
+
+/**
+ * Check-in + draw in ONE step. Idempotent: if this registration already
+ * has a result, the original result is returned and nothing is redrawn.
+ * @returns {{result:'ok'|'already'|'locked'|'ended'|'not_registered', play?:object}}
+ */
+export async function playLuckyStar(regToken) {
+  await delay(350);
+  return withLuckyLock(() => {
+    const regs = read(KEY.regs, []);
+    const reg = regs.find(r => r.token === regToken && r.status !== 'cancelled');
+    if (!reg) return { result: 'not_registered' };
+
+    const prizes = readPrizes();
+    const plays = readPlays();
+    const existing = plays.find(p => p.regId === reg.id);
+    if (existing) return { result: 'already', play: playView(existing, prizes) };
+
+    const win = getLuckyWindow();
+    if (win.state === 'before') return { result: 'locked' };
+    if (win.state === 'after') return { result: 'ended' };
+
+    // --- draw one star from the box ---
+    const cfg = getLuckyConfig();
+    const stock = prizeStock(prizes, plays).filter(p => p.remaining > 0);
+    const prizeStars = stock.reduce((s, p) => s + p.remaining, 0);
+    const starsLeft = Math.max(cfg.totalStars - plays.length, prizeStars);
+    let prize = null;
+    if (starsLeft > 0) {
+      let pick = randInt(starsLeft);
+      for (const p of stock) { if (pick < p.remaining) { prize = p; break; } pick -= p.remaining; }
+    }
+
+    const now = new Date().toISOString();
+    const play = {
+      id: nextPlayId(),
+      regId: reg.id,
+      fullName: reg.fullName,
+      result: prize ? 'win' : 'none',
+      prizeId: prize?.id || null,
+      prizeName: prize?.name || null,
+      claimCode: prize ? claimCode(new Set(plays.map(p => p.claimCode).filter(Boolean))) : null,
+      playedAt: now,
+      redeemedAt: null,
+      redeemedBy: null,
+    };
+
+    // check-in is recorded together with the draw
+    if (!reg.checkedInAt) { reg.checkedInAt = now; reg.checkedInBy = 'self-luckystar'; }
+    plays.push(play);
+    write(KEY.regs, regs);
+    write(KEY.lsPlays, plays);
+    audit('lucky.play', { id: play.id, regId: reg.id, result: play.result, prizeId: play.prizeId });
+    emit();
+    return { result: 'ok', play: playView(play, prizes) };
+  });
+}
+
+/** Look up a prize claim by QR text or 8-char code (staff). */
+export async function findClaim(codeOrQr) {
+  await delay(120);
+  const code = parseLuckyQr(codeOrQr);
+  if (!code) return { result: 'invalid' };
+  const p = readPlays().find(x => x.claimCode === code);
+  if (!p) return { result: 'invalid' };
+  const reg = read(KEY.regs, []).find(r => r.id === p.regId);
+  return {
+    result: p.redeemedAt ? 'already' : 'ok',
+    play: playView(p, readPrizes()),
+    registration: reg ? publicView(reg) : null,
+  };
+}
+
+/** Staff confirms hand-over. One-time only; does NOT touch check-in. */
+export async function redeemPrize(codeOrQr, staff = 'staff') {
+  await delay(200);
+  const code = parseLuckyQr(codeOrQr);
+  if (!code) return { result: 'invalid' };
+  return withLuckyLock(() => {
+    const plays = readPlays();
+    const p = plays.find(x => x.claimCode === code);
+    if (!p) { audit('lucky.redeem.invalid', { staff }); return { result: 'invalid' }; }
+    if (p.redeemedAt) {
+      audit('lucky.redeem.duplicate', { staff, id: p.id });
+      return { result: 'already', play: playView(p, readPrizes()) };
+    }
+    p.redeemedAt = new Date().toISOString();
+    p.redeemedBy = staff;
+    write(KEY.lsPlays, plays);
+    audit('lucky.redeem', { staff, id: p.id, prizeId: p.prizeId });
+    emit();
+    return { result: 'ok', play: playView(p, readPrizes()) };
+  });
+}
+
+export async function listLuckyPlays() {
+  await delay(60);
+  const prizes = readPrizes();
+  return readPlays().slice().reverse().map(p => playView(p, prizes));
+}
+
+export async function getLuckyStats() {
+  await delay(40);
+  const plays = readPlays();
+  const prizes = prizeStock(readPrizes(), plays);
+  const cfg = getLuckyConfig();
+  const winners = plays.filter(p => p.result === 'win');
+  const prizeTotal = prizes.reduce((s, p) => s + (Number(p.qty) || 0), 0);
+  const prizeRemaining = prizes.reduce((s, p) => s + p.remaining, 0);
+  return {
+    participants: plays.length,
+    winners: winners.length,
+    noPrize: plays.length - winners.length,
+    redeemed: winners.filter(p => p.redeemedAt).length,
+    awaitingRedeem: winners.filter(p => !p.redeemedAt).length,
+    prizeTotal,
+    prizeRemaining,
+    totalStars: cfg.totalStars,
+    starsLeft: Math.max(cfg.totalStars - plays.length, prizeRemaining, 0),
+  };
+}
+
+export async function resetLuckyPlays(staff = 'staff') {
+  await delay(100);
+  localStorage.removeItem(KEY.lsPlays);
+  localStorage.removeItem(KEY.lsSeq);
+  audit('lucky.reset', { staff });
+  emit();
+}
 
 /* ---------------- Demo utilities ---------------- */
 const DEMO_FIRST = ['สมชาย', 'สมหญิง', 'กิตติ', 'อรุณี', 'ธนา', 'พิมพ์ชนก', 'วีระ', 'ศิริพร', 'ณัฐ', 'ปวีณา', 'อนันต์', 'มาลี'];

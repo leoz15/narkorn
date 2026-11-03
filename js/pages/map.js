@@ -10,22 +10,25 @@
  */
 import * as THREE from 'three';
 import { OrbitControls } from 'three/addons/controls/OrbitControls.js';
-import { EVENT, getStats, onStats, recordVisit, getMyTicket } from '../store.js';
-import { countUp, toast } from '../ui.js';
+import { EVENT, onStats, recordVisit, getMyTicket } from '../store.js';
+import { toast } from '../ui.js';
 import { NavGrid, createMe, ME_STATE } from './map-character.js';
+import { mountLuckyStar } from '../lucky-star.js';
 
 // single live map instance → guarantees exactly one ME even if render() is re-entered
 let activeCleanup = null;
 let renderSeq = 0;
 
 const ME_STATUS = {
-  [ME_STATE.IDLE]: ['👆', 'แตะ <b>โบสถ์</b> · <b>เวที</b> · <b>โต๊ะอาหาร</b> เพื่อพา ME ไปทำกิจกรรม'],
+  [ME_STATE.IDLE]: ['👆', 'แตะ <b>ต้นไม้สอยดาว</b> · <b>โบสถ์</b> · <b>เวที</b> · <b>โต๊ะอาหาร</b> เพื่อพา ME ไปทำกิจกรรม'],
   [ME_STATE.WALKING_TO_CHURCH]: ['🚶', 'ME กำลังเดินไปหน้าพระ…'],
   [ME_STATE.PRAYING]: ['🙏', 'ME กำลังไหว้พระ · <b>สาธุ</b>'],
   [ME_STATE.WALKING_TO_STAGE]: ['🚶', 'ME กำลังเดินไปหน้าเวที…'],
   [ME_STATE.DANCING]: ['💃', 'ME กำลังเต้นหน้าเวที · <b>ม่วนคักๆ</b>'],
   [ME_STATE.WALKING_TO_DINING]: ['🚶', 'ME กำลังเดินไปโต๊ะอาหาร…'],
   [ME_STATE.EATING]: ['🍚', 'ME กำลังรับประทานอาหาร · <b>อนุโมทนาบุญ</b>'],
+  [ME_STATE.WALKING_TO_LUCKY]: ['🚶', 'ME กำลังเดินไปต้นไม้สอยดาว…'],
+  [ME_STATE.LUCKY_DRAWING]: ['⭐', 'ME กำลังสอยดาวลุ้นรางวัล · <b>สาธุ</b>'],
 };
 
 const CFG = { supported: 300, defaultVisible: 50 };
@@ -68,24 +71,7 @@ export async function render(el) {
     <div class="map-canvas" id="map-canvas"></div>
     <div class="map-labels" id="map-labels"></div>
 
-    <div class="map-hud">
-      <div class="hud-card glass" id="hud-card" title="${EVENT.dateTh} · ${EVENT.venue}">
-        <div class="hud-head">
-          <div class="logo">🛕</div>
-          <div class="hud-head-main">
-            <div class="hud-head-row">
-              <h1>วัดลานคา · แผนที่งาน 3D</h1>
-              <div class="clock"><span class="dot live" style="color:var(--leaf-d)"></span><span id="map-clock">--:--</span></div>
-            </div>
-            <div class="hud-mini-stats" id="hud-mini-stats">
-              <span>จำนวนที่เข้ามาชม <b><span id="hs-visitors">0</span></b> คน</span>
-              <span class="sep">•</span>
-              <span>จำนวนเช็คอิน <b><span id="hs-chk">0</span></b> ครั้ง</span>
-            </div>
-          </div>
-        </div>
-      </div>
-    </div>
+    <div class="map-hud" id="ls-host"></div>
 
     <div class="map-controls glass">
       <button id="mc-zoom-in" title="ซูมเข้า">＋</button>
@@ -113,11 +99,14 @@ export async function render(el) {
   const labelsEl = el.querySelector('#map-labels');
   const sheet = el.querySelector('#zone-sheet');
 
+  // ---------- Lucky Star card (replaces the old info HUD) ----------
+  let offLucky = null;
+
   // ---------- WebGL support ----------
   const testCanvas = document.createElement('canvas');
   if (!(testCanvas.getContext('webgl2') || testCanvas.getContext('webgl'))) {
     el.querySelector('#map-loading').innerHTML = `<div class="card" style="max-width:420px;text-align:center"><img src="./assets/hero.jpg" alt="ภาพแผนที่งาน" style="border-radius:12px;margin-bottom:12px"/>อุปกรณ์นี้ไม่รองรับ 3D แสดงภาพแผนที่แทน</div>`;
-    return;
+    return mountLuckyStar(el.querySelector('#ls-host'), el.querySelector('#map-page'));
   }
   await Promise.all([
     document.fonts.ready,
@@ -191,6 +180,45 @@ export async function render(el) {
     const s = new THREE.Shape(); s.moveTo(-w / 2, 0); s.lineTo(w / 2, 0); s.lineTo(0, h); s.closePath();
     const g = new THREE.ExtrudeGeometry(s, { depth: len, bevelEnabled: false }); g.translate(0, 0, -len / 2);
     return new THREE.Mesh(g, M(c));
+  };
+  const createStarGeometry = (outerR = 0.3, innerR = 0.14, depth = 0.08) => {
+    const s = new THREE.Shape();
+    const pts = 5;
+    for (let i = 0; i < pts * 2; i++) {
+      const r = i % 2 === 0 ? outerR : innerR;
+      const a = (i / (pts * 2)) * Math.PI * 2 - Math.PI / 2;
+      const px = Math.cos(a) * r, py = Math.sin(a) * r;
+      if (i === 0) s.moveTo(px, py); else s.lineTo(px, py);
+    }
+    s.closePath();
+    const g = new THREE.ExtrudeGeometry(s, {
+      depth,
+      bevelEnabled: true,
+      bevelThickness: 0.025,
+      bevelSize: 0.025,
+      bevelSegments: 1,
+    });
+    g.center();
+    disposables.push(g);
+    return g;
+  };
+  const createBodhiLeafGeometry = (scale = 0.35) => {
+    const s = new THREE.Shape();
+    s.moveTo(0, 0);
+    s.bezierCurveTo(-0.24 * scale, 0.15 * scale, -0.32 * scale, 0.55 * scale, -0.22 * scale, 0.8 * scale);
+    s.bezierCurveTo(-0.14 * scale, 1.05 * scale, -0.05 * scale, 1.3 * scale, 0, 1.65 * scale);
+    s.bezierCurveTo(0.05 * scale, 1.3 * scale, 0.14 * scale, 1.05 * scale, 0.22 * scale, 0.8 * scale);
+    s.bezierCurveTo(0.32 * scale, 0.55 * scale, 0.24 * scale, 0.15 * scale, 0, 0);
+    const g = new THREE.ExtrudeGeometry(s, {
+      depth: 0.02 * scale,
+      bevelEnabled: true,
+      bevelThickness: 0.01 * scale,
+      bevelSize: 0.01 * scale,
+      bevelSegments: 1,
+    });
+    g.center();
+    disposables.push(g);
+    return g;
   };
   const canvasTex = (draw, w = 512, h = 128) => {
     const c = document.createElement('canvas'); c.width = w; c.height = h; draw(c.getContext('2d'), w, h);
@@ -274,8 +302,8 @@ export async function render(el) {
   }
   // low boundary wall (kampaeng kaew) with front opening
   for (const [w, d, x, z] of [[15, 0.4, 0, -9.5], [0.4, 19, -7.5, 0], [0.4, 19, 7.5, 0], [5, 0.4, -5, 9.5], [5, 0.4, 5, 9.5]]) box(w, 0.9, d, COL.white, x, 0.5, z, temple);
-  // flag poles with golden banners
-  for (const x of [-9, 9]) { cyl(0.08, 0.08, 5, COL.metal, x, 0, 11.5, temple, 6); const f = box(0.05, 1.6, 0.9, COL.gold, x, 3.2, 11.95, temple); f.castShadow = false; }
+  // flag pole with golden banner (right side of temple entrance)
+  for (const x of [9]) { cyl(0.08, 0.08, 5, COL.metal, x, 0, 11.5, temple, 6); const f = box(0.05, 1.6, 0.9, COL.gold, x, 3.2, 11.95, temple); f.castShadow = false; }
 
   // ---------- Monk Mascot (front of temple) ----------
   const monk = new THREE.Group(); monk.position.set(-18, 0.07, 2.6); world.add(monk);
@@ -293,6 +321,602 @@ export async function render(el) {
   cyl(1.4, 1.5, 0.12, COL.gold, 0, 0, 0, monk, 20);
   const halo = new THREE.Mesh(new THREE.TorusGeometry(1.15, 0.05, 6, 32), new THREE.MeshBasicMaterial({ color: '#ffd36b', transparent: true, opacity: 0.7 }));
   halo.rotation.x = Math.PI / 2; halo.position.y = 3.6; monk.add(halo); disposables.push(halo.geometry, halo.material);
+
+  // Web Audio chime sound synthesizer for Lucky Star harvest
+  function playStarChime() {
+    try {
+      const AudioCtx = window.AudioContext || window.webkitAudioContext;
+      if (!AudioCtx) return;
+      const ctx = new AudioCtx();
+      const freqs = [1318.5, 1661.2, 1975.5, 2637.0]; // E6, G#6, B6, E7 crystal chimes
+      freqs.forEach((f, i) => {
+        const osc = ctx.createOscillator();
+        const gain = ctx.createGain();
+        osc.type = 'sine';
+        const t = ctx.currentTime + i * 0.12;
+        osc.frequency.setValueAtTime(f, t);
+        gain.gain.setValueAtTime(0, t);
+        gain.gain.linearRampToValueAtTime(0.25, t + 0.02);
+        gain.gain.exponentialRampToValueAtTime(0.001, t + 0.85);
+        osc.connect(gain);
+        gain.connect(ctx.destination);
+        osc.start(t);
+        osc.stop(t + 0.9);
+      });
+    } catch (e) {}
+  }
+
+  // Fullscreen golden flash overlay for harvest reveal
+  const flashOverlay = document.createElement('div');
+  flashOverlay.className = 'ls-screen-flash';
+  el.querySelector('#map-page').appendChild(flashOverlay);
+
+  // ---------- Zone 1.5: Lucky Star Bodhi Tree (ต้นโพธิ์สอยดาว) ----------
+  const treeHits = [];
+  const luckyTreeGroup = new THREE.Group();
+  luckyTreeGroup.position.set(-28.5, 0, 6.8);
+  world.add(luckyTreeGroup);
+
+  // 1. Base / Platform (ฐานแท่นหินทรงกลมธรรมชาติ & เนินหญ้า)
+  cyl(2.1, 2.3, 0.14, COL.stone, 0, 0, 0, luckyTreeGroup, 20);
+  const goldRim = new THREE.Mesh(new THREE.TorusGeometry(2.2, 0.045, 6, 32), M(COL.gold));
+  goldRim.rotation.x = Math.PI / 2; goldRim.position.y = 0.14; luckyTreeGroup.add(goldRim); disposables.push(goldRim.geometry);
+  cyl(1.7, 1.82, 0.12, '#335022', 0, 0.14, 0, luckyTreeGroup, 18); // inner sacred moss/grass tier
+
+  // Decorative grass tufts around dais
+  [0.6, 1.8, 2.5, 3.6, 4.8, 5.7].forEach((ang, i) => {
+    const gr = cyl(0.04, 0.14, 0.16 + (i % 2) * 0.06, i % 2 === 0 ? '#689f38' : '#8bc34a', 0, 0, 0, luckyTreeGroup, 5);
+    gr.position.set(Math.cos(ang) * 1.9, 0.18, Math.sin(ang) * 1.9);
+    gr.rotation.set((Math.random() - 0.5) * 0.3, Math.random() * Math.PI, (Math.random() - 0.5) * 0.3);
+  });
+
+  // Ground interaction ring in front of tree where ME stands
+  const luckySpotRing = new THREE.Mesh(
+    new THREE.RingGeometry(0.38, 0.52, 28),
+    new THREE.MeshBasicMaterial({ color: '#ffbe3d', transparent: true, opacity: 0.85, depthWrite: false })
+  );
+  luckySpotRing.rotation.x = -Math.PI / 2; luckySpotRing.position.set(0, 0.03, 1.4); luckySpotRing.renderOrder = 2;
+  luckyTreeGroup.add(luckySpotRing); disposables.push(luckySpotRing.geometry, luckySpotRing.material);
+
+  // 2. Bodhi Sprawling Buttress Roots (พอนรากแผ่ขยายตามธรรมชาติ)
+  const rootBarkColor = '#3a2213';
+  const rootDefs = [
+    { len: 0.95, r1: 0.22, r2: 0.08, a: 0.35, y: 0.20 },
+    { len: 1.05, r1: 0.24, r2: 0.09, a: 1.15, y: 0.22 },
+    { len: 0.90, r1: 0.20, r2: 0.07, a: 2.05, y: 0.20 },
+    { len: 1.15, r1: 0.26, r2: 0.09, a: 2.85, y: 0.24 },
+    { len: 1.00, r1: 0.22, r2: 0.08, a: 3.65, y: 0.22 },
+    { len: 1.10, r1: 0.25, r2: 0.09, a: 4.55, y: 0.24 },
+    { len: 0.85, r1: 0.19, r2: 0.07, a: 5.35, y: 0.19 },
+  ];
+  rootDefs.forEach(({ len, r1, r2, a, y }) => {
+    const root = cyl(r2, r1, len, rootBarkColor, 0, 0, 0, luckyTreeGroup, 6);
+    root.position.set(Math.cos(a) * (len * 0.45 + 0.25), y, Math.sin(a) * (len * 0.45 + 0.25));
+    root.rotation.set(0, -a + Math.PI / 2, 0);
+    root.rotation.z = Math.PI / 2 - 0.25;
+  });
+
+  // 3. Bodhi Trunk & Organic Gnarled Bark (ลำต้นหลักหนาและกิ่งก้านแผ่กว้าง)
+  cyl(0.56, 0.74, 1.3, '#3a2213', 0, 0.24, 0, luckyTreeGroup, 9);
+  cyl(0.18, 0.22, 1.25, '#442817', 0.42, 0.26, 0.15, luckyTreeGroup, 6);
+  cyl(0.17, 0.20, 1.25, '#2e1b10', -0.38, 0.26, 0.22, luckyTreeGroup, 6);
+  cyl(0.16, 0.21, 1.25, '#442817', 0.12, 0.26, -0.42, luckyTreeGroup, 6);
+  cyl(0.44, 0.56, 1.2, '#3a2213', -0.02, 1.5, 0.01, luckyTreeGroup, 8);
+  cyl(0.52, 0.44, 0.8, '#442817', 0.01, 2.35, 0.02, luckyTreeGroup, 8);
+
+  const addBodhiBough = (len, r1, r2, x, y, z, rotX, rotY, rotZ) => {
+    const b = cyl(r2, r1, len, '#3a2213', 0, 0, 0, luckyTreeGroup, 6);
+    b.position.set(x, y + len / 2, z);
+    b.rotation.set(rotX, rotY, rotZ);
+    return b;
+  };
+  addBodhiBough(1.15, 0.18, 0.12, 0.0, 2.3, 0.35, 0.52, 0.08, 0.0);       // front bough towards ME
+  addBodhiBough(1.35, 0.19, 0.12, -0.45, 2.35, 0.2, 0.38, 0.0, 0.58);     // front-left bough
+  addBodhiBough(1.35, 0.19, 0.12, 0.45, 2.35, 0.2, 0.32, 0.0, -0.58);     // front-right bough
+  addBodhiBough(1.45, 0.20, 0.13, -0.55, 2.45, -0.15, -0.1, 0.0, 0.72);   // mid-left broad bough
+  addBodhiBough(1.45, 0.20, 0.13, 0.55, 2.45, -0.15, -0.05, 0.0, -0.72);  // mid-right broad bough
+  addBodhiBough(1.30, 0.18, 0.11, -0.4, 2.5, -0.45, -0.55, 0.0, 0.42);    // back-left bough
+  addBodhiBough(1.30, 0.18, 0.11, 0.4, 2.5, -0.45, -0.52, 0.0, -0.45);    // back-right bough
+  addBodhiBough(1.20, 0.18, 0.12, 0.02, 2.55, -0.5, -0.65, 0.0, 0.05);    // back-center bough
+
+  // 4. Bodhi Canopy Clusters (ร่มโพธิ์แผ่กว้าง ทรงร่ม หลากเฉดสีเขียว มีมิติ)
+  const bodhiGreens = [
+    '#33691e', // 0: Deep sacred Bodhi green
+    '#558b2f', // 1: Rich temple Bodhi green
+    '#689f38', // 2: Fresh vibrant green
+    '#7cb342', // 3: Golden-lime Bodhi leaf green
+    '#9ccc65', // 4: Young tender Bodhi leaf green
+  ];
+  [
+    // Top crown dome
+    [0, 4.4, -0.05, 1.4, 1],
+    [-0.35, 4.55, 0.15, 0.95, 3],
+    [0.4, 4.45, -0.25, 0.9, 4],
+    [0.1, 4.65, 0.1, 0.75, 2],
+
+    // Broad umbrella mid-tier
+    [-1.25, 3.8, 0.2, 1.15, 2],
+    [1.25, 3.8, -0.1, 1.15, 1],
+    [0.1, 3.9, -1.2, 1.2, 0],
+    [0.0, 3.7, 1.05, 1.1, 3],
+    [-0.95, 3.6, -0.9, 1.05, 0],
+    [0.95, 3.6, 0.85, 1.05, 4],
+    [-0.95, 3.5, 0.95, 1.0, 2],
+    [1.05, 3.5, -0.85, 1.05, 1],
+
+    // Lower hanging edge foliage
+    [0.0, 3.0, 0.85, 0.8, 3],
+    [-1.45, 3.1, -0.1, 0.85, 1],
+    [1.45, 3.1, 0.15, 0.85, 2],
+    [-0.7, 3.1, 1.15, 0.75, 4],
+    [0.75, 3.1, 1.1, 0.75, 3],
+    [0.0, 3.2, -1.35, 0.8, 0],
+  ].forEach(([x, y, z, s, ci]) => {
+    const f = add(new THREE.Mesh(new THREE.IcosahedronGeometry(s, 0), M(bodhiGreens[ci])), luckyTreeGroup);
+    f.position.set(x, y, z);
+    f.rotation.set(Math.random() * 2, Math.random() * 2, 0);
+  });
+
+  // 5. Individual 3D Heart-shaped Bodhi Leaves (ใบโพธิ์ 3D ทรงหัวใจปลายเรียวยาว)
+  const bodhiLeaves = [];
+  const leafDefs = [
+    { pos: [-0.65, 2.55, 0.95], rot: [0.35, 0.4, 0.2], col: '#8bc34a', s: 0.32 },
+    { pos: [0.65, 2.5, 0.9], rot: [0.25, -0.5, -0.2], col: '#9ccc65', s: 0.3 },
+    { pos: [-1.2, 2.6, 0.4], rot: [0.4, 1.1, 0.1], col: '#7cb342', s: 0.35 },
+    { pos: [1.25, 2.65, 0.35], rot: [0.3, -1.2, -0.2], col: '#689f38', s: 0.34 },
+    { pos: [-1.1, 2.7, -0.6], rot: [-0.3, 2.0, 0.3], col: '#558b2f', s: 0.32 },
+    { pos: [1.1, 2.7, -0.65], rot: [-0.2, -2.1, -0.2], col: '#7cb342', s: 0.33 },
+    { pos: [0.0, 2.75, 1.3], rot: [0.55, 0, 0], col: '#9ccc65', s: 0.36 },
+    { pos: [-0.32, 2.9, 1.12], rot: [0.3, 0.3, 0.1], col: '#8bc34a', s: 0.3 },
+    { pos: [0.35, 2.85, 1.15], rot: [0.3, -0.3, -0.1], col: '#7cb342', s: 0.32 },
+    { pos: [-1.35, 3.2, 0.0], rot: [0.1, 1.57, 0.2], col: '#689f38', s: 0.3 },
+    { pos: [1.38, 3.2, 0.0], rot: [0.1, -1.57, -0.2], col: '#8bc34a', s: 0.32 },
+    { pos: [0.0, 2.9, -1.3], rot: [-0.4, 3.14, 0], col: '#558b2f', s: 0.35 },
+  ];
+  leafDefs.forEach((ld, i) => {
+    const leafGeo = createBodhiLeafGeometry(ld.s);
+    const leafMesh = new THREE.Mesh(leafGeo, M(ld.col));
+    leafMesh.castShadow = true;
+    leafMesh.position.set(...ld.pos);
+    leafMesh.rotation.set(...ld.rot);
+    luckyTreeGroup.add(leafMesh);
+    bodhiLeaves.push({ mesh: leafMesh, origRot: [...ld.rot], phase: i * 0.7 });
+  });
+
+  // 6. Festive Palette Materials (หลากสีสันสดใสสไตล์งานวัดตามรูปจริง)
+  // ละอองดาวประดับพุ่มไม้ขนาดเล็ก-จิ๋ว (ขนาดเล็กกว่าที่อยู่ตรงด้ายเชือก เพื่อให้ดูเป็นละอองดาว ไม่เทอะทะ)
+  const starGeoDust = createStarGeometry(0.065, 0.030, 0.018); // ขนาดจิ๋ว Micro Dust Star
+  const starGeoMini = createStarGeometry(0.092, 0.042, 0.024); // ขนาดเล็ก Mini Stardust Star
+
+  // ดาวสำหรับสายเชือกและ Hero Star
+  const starGeoTiny = createStarGeometry(0.12, 0.055, 0.035);
+  const starGeoSm = createStarGeometry(0.18, 0.08, 0.05);
+  const starGeoMed = createStarGeometry(0.26, 0.12, 0.07);
+  const starGeoLg = createStarGeometry(0.38, 0.18, 0.10);
+
+  // 9 สีสันสดใสเรืองแสง (Emissive Glow โดดเด่นตัดกับสีเขียวของพุ่มไม้)
+  const starMats = {
+    pink: new THREE.MeshStandardMaterial({ color: '#ff4081', roughness: 0.2, metalness: 0.2, emissive: '#ff1744', emissiveIntensity: 0.88, flatShading: true }),
+    yellow: new THREE.MeshStandardMaterial({ color: '#fff176', roughness: 0.2, metalness: 0.2, emissive: '#ffea00', emissiveIntensity: 0.92, flatShading: true }),
+    cyan: new THREE.MeshStandardMaterial({ color: '#00e5ff', roughness: 0.2, metalness: 0.2, emissive: '#00e5ff', emissiveIntensity: 0.88, flatShading: true }),
+    orange: new THREE.MeshStandardMaterial({ color: '#ff9800', roughness: 0.2, metalness: 0.2, emissive: '#ff6d00', emissiveIntensity: 0.88, flatShading: true }),
+    gold: new THREE.MeshStandardMaterial({ color: '#ffc107', roughness: 0.2, metalness: 0.25, emissive: '#ffa000', emissiveIntensity: 0.88, flatShading: true }),
+    mint: new THREE.MeshStandardMaterial({ color: '#69f0ae', roughness: 0.2, metalness: 0.2, emissive: '#00e676', emissiveIntensity: 0.88, flatShading: true }),
+    purple: new THREE.MeshStandardMaterial({ color: '#e040fb', roughness: 0.2, metalness: 0.2, emissive: '#d500f9', emissiveIntensity: 0.88, flatShading: true }),
+    blue: new THREE.MeshStandardMaterial({ color: '#29b6f6', roughness: 0.2, metalness: 0.2, emissive: '#00b0ff', emissiveIntensity: 0.88, flatShading: true }),
+    white: new THREE.MeshStandardMaterial({ color: '#ffffff', roughness: 0.15, metalness: 0.1, emissive: '#ffffff', emissiveIntensity: 0.95, flatShading: true }),
+  };
+  Object.values(starMats).forEach(m => disposables.push(m));
+
+  // 6.1 Canopy Stardust (ละอองดาวหลากสีดวงเล็ก-จิ๋ว 50 ดวง สลับขนาดประดับพุ่มไม้ ไม่เทอะทะ เรืองแสงเด่นชัด)
+  const canopyDustDefs = [
+    // Top apex peak & high crown (y: 5.45 - 5.85)
+    { pos: [0.0, 5.84, 0.0], col: 'white', s: 'mini' },
+    { pos: [-0.28, 5.72, 0.22], col: 'pink', s: 'dust' },
+    { pos: [0.28, 5.70, -0.18], col: 'yellow', s: 'dust' },
+    { pos: [0.15, 5.75, 0.28], col: 'cyan', s: 'mini' },
+    { pos: [-0.22, 5.68, -0.28], col: 'gold', s: 'dust' },
+    { pos: [0.35, 5.62, 0.18], col: 'orange', s: 'mini' },
+    { pos: [-0.12, 5.76, -0.12], col: 'mint', s: 'dust' },
+    { pos: [0.0, 5.70, -0.32], col: 'purple', s: 'dust' },
+    { pos: [-0.35, 5.58, 0.12], col: 'blue', s: 'mini' },
+    { pos: [0.32, 5.58, -0.1], col: 'pink', s: 'dust' },
+
+    // High front-facing slope (y: 4.95 - 5.45, z: 0.35 - 1.1)
+    { pos: [-0.42, 5.35, 0.72], col: 'yellow', s: 'mini' },
+    { pos: [0.45, 5.30, 0.68], col: 'cyan', s: 'dust' },
+    { pos: [0.0, 5.45, 0.82], col: 'pink', s: 'mini' },
+    { pos: [-0.75, 5.15, 0.52], col: 'orange', s: 'dust' },
+    { pos: [0.78, 5.10, 0.48], col: 'mint', s: 'mini' },
+    { pos: [-0.2, 5.22, 1.02], col: 'gold', s: 'dust' },
+    { pos: [0.22, 5.18, 0.98], col: 'white', s: 'mini' },
+    { pos: [0.0, 5.05, 1.22], col: 'purple', s: 'dust' },
+    { pos: [-0.55, 5.15, 0.95], col: 'blue', s: 'dust' },
+    { pos: [0.55, 5.12, 0.92], col: 'yellow', s: 'mini' },
+
+    // Mid front-facing canopy faces (y: 4.25 - 4.85, z: 0.85 - 1.75)
+    { pos: [-0.5, 4.75, 1.42], col: 'pink', s: 'mini' },
+    { pos: [0.52, 4.70, 1.38], col: 'cyan', s: 'dust' },
+    { pos: [-0.9, 4.55, 1.22], col: 'gold', s: 'mini' },
+    { pos: [0.92, 4.50, 1.18], col: 'orange', s: 'dust' },
+    { pos: [-0.28, 4.45, 1.65], col: 'mint', s: 'dust' },
+    { pos: [0.3, 4.40, 1.62], col: 'purple', s: 'mini' },
+    { pos: [0.0, 4.55, 1.72], col: 'white', s: 'mini' },
+    { pos: [-0.7, 4.28, 1.52], col: 'yellow', s: 'dust' },
+    { pos: [0.7, 4.25, 1.48], col: 'blue', s: 'dust' },
+    { pos: [-0.25, 4.15, 1.82], col: 'pink', s: 'mini' },
+    { pos: [0.25, 4.12, 1.78], col: 'cyan', s: 'dust' },
+    { pos: [0.0, 4.2, 1.85], col: 'gold', s: 'dust' },
+
+    // Left crown shoulder & side (y: 4.4 - 5.3, x: -1.1 to -1.8)
+    { pos: [-1.22, 5.20, 0.1], col: 'purple', s: 'mini' },
+    { pos: [-1.42, 4.85, 0.42], col: 'white', s: 'dust' },
+    { pos: [-1.52, 4.60, -0.12], col: 'yellow', s: 'mini' },
+    { pos: [-1.32, 4.95, -0.42], col: 'pink', s: 'dust' },
+    { pos: [-1.62, 4.35, 0.22], col: 'mint', s: 'dust' },
+    { pos: [-1.45, 4.45, 0.72], col: 'orange', s: 'mini' },
+
+    // Right crown shoulder & side (y: 4.4 - 5.3, x: 1.1 to 1.8)
+    { pos: [1.22, 5.15, -0.08], col: 'blue', s: 'mini' },
+    { pos: [1.42, 4.80, 0.4], col: 'gold', s: 'dust' },
+    { pos: [1.52, 4.55, -0.15], col: 'cyan', s: 'mini' },
+    { pos: [1.32, 4.90, -0.45], col: 'yellow', s: 'dust' },
+    { pos: [1.62, 4.30, 0.2], col: 'pink', s: 'dust' },
+    { pos: [1.45, 4.40, 0.7], col: 'purple', s: 'mini' },
+
+    // Back & High crown slopes (y: 4.8 - 5.45, z: -0.6 to -1.35)
+    { pos: [-0.62, 5.25, -0.82], col: 'white', s: 'mini' },
+    { pos: [0.62, 5.20, -0.78], col: 'mint', s: 'dust' },
+    { pos: [0.0, 5.40, -1.02], col: 'orange', s: 'mini' },
+    { pos: [-0.85, 4.85, -0.95], col: 'blue', s: 'dust' },
+    { pos: [0.85, 4.80, -0.92], col: 'gold', s: 'dust' },
+    { pos: [0.0, 4.9, -1.35], col: 'pink', s: 'mini' },
+  ];
+
+  const canopyDustStars = [];
+  canopyDustDefs.forEach((def, i) => {
+    const geo = def.s === 'dust' ? starGeoDust : starGeoMini;
+    const starMesh = new THREE.Mesh(geo, starMats[def.col] || starMats.yellow);
+    starMesh.castShadow = true;
+    starMesh.position.set(...def.pos);
+    starMesh.renderOrder = 1;
+
+    // Normal vector pointing outward from crown center
+    const outward = new THREE.Vector3(def.pos[0], def.pos[1] - 4.3, def.pos[2]).normalize();
+    outward.y = Math.max(outward.y, 0.25);
+    outward.z = Math.max(outward.z, 0.2);
+    outward.normalize();
+    starMesh.quaternion.setFromUnitVectors(new THREE.Vector3(0, 0, 1), outward);
+    starMesh.rotateZ((i * 1.37) % (Math.PI * 2));
+
+    luckyTreeGroup.add(starMesh);
+    canopyDustStars.push({ mesh: starMesh, phase: i * 0.55 });
+  });
+
+  // 6.2 Cascading Strings with Small Stars (สายเชือกดิ่งระย้าพร้อมดาวเล็กตามสายเหมือนภาพถ่ายจริง)
+  const hangingStarDefs = [
+    // Front-left area
+    { topY: 3.2, botY: 2.1, x: -0.55, z: 0.95, mat: starMats.pink, geo: starGeoSm, midMat: starMats.yellow, phase: 0.2 },
+    { topY: 3.4, botY: 2.3, x: -0.85, z: 0.85, mat: starMats.cyan, geo: starGeoTiny, phase: 0.8 },
+    { topY: 3.1, botY: 1.9, x: -1.15, z: 0.70, mat: starMats.gold, geo: starGeoMed, midMat: starMats.purple, phase: 1.4 },
+    { topY: 3.5, botY: 2.2, x: -0.35, z: 1.25, mat: starMats.blue, geo: starGeoSm, phase: 2.0 },
+    
+    // Front-right area
+    { topY: 3.2, botY: 2.05, x: 0.55, z: 0.95, mat: starMats.orange, geo: starGeoSm, midMat: starMats.mint, phase: 2.6 },
+    { topY: 3.4, botY: 2.25, x: 0.85, z: 0.85, mat: starMats.yellow, geo: starGeoTiny, phase: 3.1 },
+    { topY: 3.1, botY: 1.85, x: 1.15, z: 0.70, mat: starMats.pink, geo: starGeoMed, midMat: starMats.cyan, phase: 3.7 },
+    { topY: 3.5, botY: 2.2, x: 0.35, z: 1.25, mat: starMats.white, geo: starGeoSm, phase: 4.2 },
+
+    // Mid-left & Far-left
+    { topY: 3.6, botY: 2.35, x: -1.45, z: 0.35, mat: starMats.mint, geo: starGeoSm, midMat: starMats.pink, phase: 4.8 },
+    { topY: 3.3, botY: 2.05, x: -1.65, z: -0.05, mat: starMats.purple, geo: starGeoMed, phase: 5.3 },
+    { topY: 3.5, botY: 2.4, x: -1.35, z: -0.35, mat: starMats.yellow, geo: starGeoTiny, phase: 0.5 },
+    { topY: 3.2, botY: 2.1, x: -1.55, z: -0.65, mat: starMats.cyan, geo: starGeoSm, midMat: starMats.orange, phase: 1.1 },
+
+    // Mid-right & Far-right
+    { topY: 3.6, botY: 2.35, x: 1.45, z: 0.35, mat: starMats.blue, geo: starGeoSm, midMat: starMats.yellow, phase: 1.7 },
+    { topY: 3.3, botY: 2.05, x: 1.65, z: -0.05, mat: starMats.pink, geo: starGeoMed, phase: 2.3 },
+    { topY: 3.5, botY: 2.4, x: 1.35, z: -0.35, mat: starMats.gold, geo: starGeoTiny, phase: 2.9 },
+    { topY: 3.2, botY: 2.1, x: 1.55, z: -0.65, mat: starMats.mint, geo: starGeoSm, midMat: starMats.purple, phase: 3.5 },
+
+    // Back-left
+    { topY: 3.7, botY: 2.3, x: -0.95, z: -1.05, mat: starMats.orange, geo: starGeoSm, midMat: starMats.cyan, phase: 4.1 },
+    { topY: 3.4, botY: 2.1, x: -0.65, z: -1.35, mat: starMats.white, geo: starGeoMed, phase: 4.7 },
+    { topY: 3.5, botY: 2.45, x: -0.35, z: -1.45, mat: starMats.purple, geo: starGeoTiny, phase: 5.2 },
+
+    // Back-right
+    { topY: 3.7, botY: 2.3, x: 0.95, z: -1.05, mat: starMats.yellow, geo: starGeoSm, midMat: starMats.pink, phase: 0.4 },
+    { topY: 3.4, botY: 2.1, x: 0.65, z: -1.35, mat: starMats.mint, geo: starGeoMed, phase: 1.0 },
+    { topY: 3.5, botY: 2.45, x: 0.35, z: -1.45, mat: starMats.blue, geo: starGeoTiny, phase: 1.6 },
+
+    // Back-center & Inner branches
+    { topY: 3.6, botY: 2.15, x: 0.0, z: -1.55, mat: starMats.pink, geo: starGeoSm, midMat: starMats.gold, phase: 2.2 },
+    { topY: 3.8, botY: 2.7, x: -0.25, z: -0.7, mat: starMats.cyan, geo: starGeoTiny, phase: 2.8 },
+    { topY: 3.8, botY: 2.7, x: 0.25, z: -0.7, mat: starMats.orange, geo: starGeoTiny, phase: 3.4 },
+  ];
+
+  const hangingStars = [];
+  hangingStarDefs.forEach(def => {
+    const sGroup = new THREE.Group();
+    sGroup.position.set(def.x, def.topY, def.z);
+    luckyTreeGroup.add(sGroup);
+
+    const stringLen = def.topY - def.botY;
+    cyl(0.007, 0.007, stringLen, '#fff9c4', 0, -stringLen / 2, 0, sGroup, 4);
+
+    const botStar = new THREE.Mesh(def.geo, def.mat);
+    botStar.castShadow = true;
+    botStar.position.set(0, -stringLen, 0);
+    sGroup.add(botStar);
+
+    if (def.midMat) {
+      const midStar = new THREE.Mesh(starGeoTiny, def.midMat);
+      midStar.castShadow = true;
+      midStar.position.set(0, -stringLen * 0.52, 0);
+      midStar.rotation.z = 0.35;
+      sGroup.add(midStar);
+    }
+
+    hangingStars.push({ group: sGroup, phase: def.phase, origY: def.topY });
+  });
+
+  // 7. Interactive Hero Harvest Star (front-center, hangs right above ME)
+  const heroStarPos = new THREE.Vector3(0, 2.25, 0.75);
+  const heroGroup = new THREE.Group();
+  heroGroup.position.copy(heroStarPos);
+  luckyTreeGroup.add(heroGroup);
+
+  const heroStarMesh = new THREE.Mesh(starGeoLg, starMats.gold);
+  heroStarMesh.castShadow = true;
+  heroGroup.add(heroStarMesh);
+
+  const heroStringLen = 0.58;
+  const heroString = cyl(0.014, 0.014, heroStringLen, COL.gold, heroStarPos.x, heroStarPos.y + heroStringLen / 2 + 0.15, heroStarPos.z, luckyTreeGroup, 4);
+
+  const glowMat = new THREE.MeshBasicMaterial({ color: '#fff59d', transparent: true, opacity: 0.38, depthWrite: false });
+  const heroGlow = new THREE.Mesh(new THREE.SphereGeometry(0.44, 12, 8), glowMat);
+  heroGroup.add(heroGlow);
+  disposables.push(glowMat, heroGlow.geometry);
+
+  const flashMat = new THREE.MeshBasicMaterial({ color: '#ffffff', transparent: true, opacity: 0, depthWrite: false });
+  const flashSphere = new THREE.Mesh(new THREE.SphereGeometry(0.4, 16, 12), flashMat);
+  flashSphere.position.copy(heroStarPos);
+  flashSphere.visible = false;
+  luckyTreeGroup.add(flashSphere);
+  disposables.push(flashMat, flashSphere.geometry);
+
+  const flashRingMat = new THREE.MeshBasicMaterial({ color: '#ffd54f', transparent: true, opacity: 0, depthWrite: false, side: THREE.DoubleSide });
+  const flashRing = new THREE.Mesh(new THREE.RingGeometry(0.15, 0.35, 32), flashRingMat);
+  flashRing.position.copy(heroStarPos);
+  flashRing.rotation.x = Math.PI / 4;
+  flashRing.visible = false;
+  luckyTreeGroup.add(flashRing);
+  disposables.push(flashRingMat, flashRing.geometry);
+
+  // 8. Tree PointLight
+  const treeLight = new THREE.PointLight('#ffd54f', 2.0, 9);
+  treeLight.position.set(0, 2.6, 0.4);
+  luckyTreeGroup.add(treeLight);
+  disposables.push(treeLight);
+
+  // 9. Ambient Floating Sparkles
+  const sparkleGeo = new THREE.OctahedronGeometry(0.055, 0);
+  const sparkleMat = new THREE.MeshBasicMaterial({ color: '#fff9c4', transparent: true, opacity: 0.85 });
+  disposables.push(sparkleGeo, sparkleMat);
+  const sparklesList = [];
+  for (let i = 0; i < 16; i++) {
+    const sp = new THREE.Mesh(sparkleGeo, sparkleMat);
+    const angle = (i / 16) * Math.PI * 2;
+    const rad = 1.2 + Math.random() * 1.1;
+    sp.position.set(Math.cos(angle) * rad, 1.8 + Math.random() * 2.2, Math.sin(angle) * rad);
+    sp.userData = { angle, rad, baseSpeed: 0.4 + Math.random() * 0.6, ySpeed: 0.3 + Math.random() * 0.4 };
+    luckyTreeGroup.add(sp);
+    sparklesList.push(sp);
+  }
+
+  // 10. Raycast hit cylinder
+  const treeHit = new THREE.Mesh(
+    new THREE.CylinderGeometry(2.3, 2.3, 5.0, 14),
+    new THREE.MeshBasicMaterial({ visible: false })
+  );
+  treeHit.position.set(0, 2.5, 0);
+  treeHit.userData.isLuckyTree = true;
+  luckyTreeGroup.add(treeHit);
+  treeHits.push(treeHit);
+  disposables.push(treeHit.geometry, treeHit.material);
+
+  // Leaning bamboo hook pole at base of Bodhi tree (rest position)
+  const leaningPole = new THREE.Group();
+  leaningPole.position.set(-0.58, 0.22, 1.15);
+  leaningPole.rotation.set(-0.25, 0.15, -0.32);
+  luckyTreeGroup.add(leaningPole);
+  cyl(0.012, 0.015, 1.35, '#cfa15d', 0, 0.67, 0, leaningPole, 6);
+  for (let ny = 0.25; ny <= 1.25; ny += 0.3) {
+    cyl(0.016, 0.016, 0.02, '#8a5a2b', 0, ny, 0, leaningPole, 6);
+  }
+  const leaningHook = new THREE.Mesh(new THREE.TorusGeometry(0.045, 0.01, 5, 12, Math.PI * 1.3), new THREE.MeshStandardMaterial({ color: '#e0b068', roughness: 0.4 }));
+  leaningHook.position.set(0, 1.33, 0.02);
+  leaningHook.rotation.set(0, Math.PI / 2, -Math.PI / 2);
+  leaningPole.add(leaningHook);
+  disposables.push(leaningHook.geometry, leaningHook.material);
+
+  let harvestState = 'IDLE'; // 'IDLE' | 'PICKUP' | 'RAISE' | 'HOOKING' | 'DETACHING' | 'CELEBRATE' | 'RESTORE'
+  let harvestTime = 0;
+  let harvestResolve = null;
+  let activeMe = null;
+  let chimePlayed = false;
+
+  const luckyTree = {
+    playHarvestSequence(meRef) {
+      return new Promise((resolve) => {
+        harvestResolve = resolve;
+        activeMe = meRef;
+        harvestState = 'PICKUP';
+        harvestTime = 0;
+        chimePlayed = false;
+        leaningPole.visible = true;
+        heroString.visible = true;
+        heroStarMesh.scale.set(1, 1, 1);
+        heroGroup.position.copy(heroStarPos);
+        heroGroup.rotation.set(0, 0, 0);
+
+        // Step 1: Character bends down to pick up bamboo hook pole
+        activeMe?.playAction?.('pickupPole', 0.25);
+      });
+    },
+    resetHarvestState() {
+      harvestState = 'IDLE';
+      harvestTime = 0;
+      harvestResolve = null;
+      activeMe?.setHoldingPole?.(false);
+      leaningPole.visible = true;
+      heroString.visible = true;
+      heroStarMesh.scale.set(1, 1, 1);
+      heroGroup.position.copy(heroStarPos);
+      heroGroup.rotation.set(0, 0, 0);
+      flashSphere.visible = false;
+      flashRing.visible = false;
+      flashOverlay?.classList?.remove('active');
+    },
+    update(dt, t) {
+      hangingStars.forEach(s => {
+        const swX = Math.sin(t * 1.8 + s.phase) * 0.09;
+        const swZ = Math.cos(t * 1.4 + s.phase) * 0.07;
+        s.group.rotation.z = swX;
+        s.group.rotation.x = swZ;
+      });
+      canopyDustStars.forEach(s => {
+        const pulse = 1 + Math.sin(t * 3.6 + s.phase) * 0.16;
+        s.mesh.scale.setScalar(pulse);
+      });
+      bodhiLeaves.forEach(bl => {
+        const flutter = Math.sin(t * 2.5 + bl.phase) * 0.08;
+        bl.mesh.rotation.x = bl.origRot[0] + flutter;
+        bl.mesh.rotation.z = bl.origRot[2] + flutter * 0.7;
+      });
+      sparklesList.forEach((sp, i) => {
+        sp.userData.angle += dt * sp.userData.baseSpeed;
+        sp.position.x = Math.cos(sp.userData.angle) * sp.userData.rad;
+        sp.position.z = Math.sin(sp.userData.angle) * sp.userData.rad;
+        sp.position.y += dt * sp.userData.ySpeed;
+        if (sp.position.y > 4.5) sp.position.y = 1.6;
+        sp.rotation.x += dt * 2; sp.rotation.y += dt * 3;
+        sp.scale.setScalar(0.7 + Math.sin(t * 3 + i) * 0.4);
+      });
+      luckySpotRing.scale.setScalar(1 + Math.sin(t * 3.5) * 0.06);
+
+      if (harvestState === 'IDLE') {
+        heroGroup.position.copy(heroStarPos);
+        heroGroup.position.y = heroStarPos.y + Math.sin(t * 2) * 0.03;
+        heroGroup.rotation.set(0, Math.sin(t * 1.5) * 0.2, Math.sin(t * 2) * 0.1);
+        heroString.visible = true;
+        heroStarMesh.scale.set(1, 1, 1);
+        heroGlow.material.opacity = 0.38 + Math.sin(t * 3) * 0.1;
+        flashSphere.visible = false;
+        flashRing.visible = false;
+      } else {
+        harvestTime += dt;
+
+        // Step 1: PICKUP (0.0s - 0.8s) - ME bends down and lifts bamboo hook pole
+        if (harvestState === 'PICKUP') {
+          if (harvestTime >= 0.42 && leaningPole.visible) {
+            leaningPole.visible = false;
+            activeMe?.setHoldingPole?.(true);
+          }
+          if (harvestTime >= 0.8) {
+            harvestState = 'RAISE';
+            activeMe?.playAction?.('hookStar', 0.28);
+          }
+        }
+        // Step 2: RAISE (0.8s - 1.6s) - ME raises pole overhead stretching towards star
+        else if (harvestState === 'RAISE') {
+          const dt2 = harvestTime - 0.8;
+          const shake = Math.sin(dt2 * 28) * 0.04;
+          heroGroup.rotation.z = shake;
+          heroGlow.material.opacity = 0.55 + Math.sin(dt2 * 18) * 0.2;
+          if (harvestTime >= 1.6) {
+            harvestState = 'HOOKING';
+          }
+        }
+        // Step 3: HOOKING (1.6s - 3.2s) - ME hooks star continuously for 1.6s with audio chime
+        else if (harvestState === 'HOOKING') {
+          const dt3 = harvestTime - 1.6;
+          if (!chimePlayed && dt3 >= 0.15) {
+            chimePlayed = true;
+            playStarChime();
+          }
+          const sway = Math.sin(dt3 * 34) * 0.24;
+          const vibX = Math.sin(dt3 * 42) * 0.05;
+          heroGroup.rotation.z = sway;
+          heroGroup.position.x = vibX;
+          heroGlow.material.opacity = 0.78 + Math.sin(dt3 * 22) * 0.22;
+
+          if (harvestTime >= 3.2) {
+            harvestState = 'DETACHING';
+            heroString.visible = false;
+            activeMe?.playAction?.('catchStar', 0.25);
+          }
+        }
+        // Step 4: DETACHING & FALLING (3.2s - 4.1s) - Star detaches, spins, and falls to ME's hands
+        else if (harvestState === 'DETACHING') {
+          const p = Math.min(1, (harvestTime - 3.2) / 0.9);
+          const ease = p * p; // gravity acceleration
+          heroGroup.position.set(0, 2.25 + (1.25 - 2.25) * ease, 0.75 + (1.18 - 0.75) * ease);
+          heroGroup.rotation.y += dt * 8;
+          heroGroup.rotation.z += dt * 4;
+          heroStarMesh.scale.setScalar(1 + ease * 0.18);
+          heroGlow.material.opacity = 0.8 + ease * 0.2;
+
+          if (p >= 1) {
+            harvestState = 'CELEBRATE';
+            activeMe?.setHoldingPole?.(false);
+            activeMe?.playAction?.('celebrate', 0.25);
+
+            // Golden flash burst on contact
+            flashSphere.visible = true;
+            flashRing.visible = true;
+            flashSphere.position.copy(heroGroup.position);
+            flashRing.position.copy(heroGroup.position);
+            heroStarMesh.scale.set(0.001, 0.001, 0.001); // absorbed into character
+
+            flashOverlay?.classList?.add('active');
+            setTimeout(() => flashOverlay?.classList?.remove('active'), 280);
+          }
+        }
+        // Step 5: CELEBRATE & REVEAL (4.1s - 5.0s) - ME jumps with joy, flash fades, popup opens!
+        else if (harvestState === 'CELEBRATE') {
+          const p = Math.min(1, (harvestTime - 4.1) / 0.9);
+          const flashScale = 0.4 + p * 3.8;
+          flashSphere.scale.setScalar(flashScale);
+          flashRing.scale.setScalar(flashScale * 1.3);
+
+          const alpha = Math.max(0, 1 - p * 1.6);
+          flashMat.opacity = alpha * 0.95;
+          flashRingMat.opacity = alpha * 0.85;
+
+          if (p >= 1) {
+            flashSphere.visible = false;
+            flashRing.visible = false;
+            harvestState = 'RESTORE';
+            if (harvestResolve) {
+              const resFn = harvestResolve;
+              harvestResolve = null;
+              resFn();
+            }
+          }
+        }
+      }
+    },
+    dispose() {
+      treeHits.length = 0;
+      luckyTreeGroup.traverse(o => {
+        if (o.geometry) o.geometry.dispose();
+        if (o.material) o.material.dispose();
+      });
+      luckyTreeGroup.parent?.remove(luckyTreeGroup);
+      flashOverlay?.remove?.();
+    }
+  };
 
   // ---------- Zone 2: Music stage + grouped tables ----------
   const stage = new THREE.Group(); stage.position.set(2, 0, -10); world.add(stage);
@@ -408,7 +1032,7 @@ export async function render(el) {
     // Right perimeter (curving gracefully around stage)
     [15, -18], [17, -9], [17, 1], [16, 10], [14, 18],
     // Front perimeter & entrance flanking
-    [9, 23], [-10, 23], [-17, 23], [-6, 14], [6, 14], [-10, 12], [11, 13]
+    [9, 23], [-17, 23], [6, 14], [11, 13]
   ];
   treeSpots.forEach(([x, z], i) => {
     if (i % 4 === 0) { // palm
@@ -431,6 +1055,7 @@ export async function render(el) {
     const x = (GCX - GW / 2 + 2) + Math.random() * (GW - 4);
     const z = -GD / 2 + 3 + Math.random() * (GD - 6);
     if (Math.abs(z - 8) < 2.5 || (x > -26 && x < -10 && z > -16 && z < 6) || (x > -7 && x < 12 && z > -14 && z < 7) || (Math.abs(x) < 3 && z > 8)) continue;
+    if (Math.hypot(x - (-28.5), z - 6.8) < 2.4) continue;
     bushSpots.push([x, z]);
     const b = add(new THREE.Mesh(new THREE.IcosahedronGeometry(0.5 + Math.random() * 0.3, 0), M(COL.leaf2))); b.position.set(x, 0.35, z);
     if (i % 2) { const fl = add(new THREE.Mesh(new THREE.SphereGeometry(0.14, 6, 4), M(['#f9a8c0', '#ffe28a', '#ffffff', '#f28b82'][i % 4])), world, false); fl.position.set(x + 0.3, 0.75, z + 0.2); }
@@ -576,7 +1201,8 @@ export async function render(el) {
   const PAD = 0.24; // ME body radius
   nav.blockRect(-25.5, -10.5, -15.5, 3.5, PAD);                                   // temple platform, hall, columns, walls
   nav.blockCircle(-18, 2.6, 1.5, PAD);                                            // monk mascot pedestal
-  [[-27, 5.5], [-9, 5.5]].forEach(([x, z]) => nav.blockCircle(x, z, 0.12, PAD));  // flag poles
+  nav.blockCircle(-28.5, 6.8, 0.8, PAD);                                          // lucky star tree base
+  nav.blockCircle(-9, 5.5, 0.12, PAD);                                            // flag pole
   nav.blockRect(-4.5, 8.5, -13.25, -6.75, PAD);                                   // stage deck + truss
   nav.blockRect(0.8, 3.2, -6.75, -5.4, PAD);                                      // stage stairs
   for (const x of [-5.6, 9.6]) nav.blockRect(x - 0.65, x + 0.65, -8, -6.8, PAD);  // floor speakers
@@ -601,7 +1227,7 @@ export async function render(el) {
     statusIco.textContent = ico; statusText.innerHTML = txt;
     pageEl.dataset.meState = s;
     const box = el.querySelector('#me-status'); box.classList.remove('pop'); void box.offsetWidth; box.classList.add('pop');
-    if (s === ME_STATE.PRAYING || s === ME_STATE.DANCING || s === ME_STATE.EATING) {
+    if (s === ME_STATE.PRAYING || s === ME_STATE.DANCING || s === ME_STATE.EATING || s === ME_STATE.LUCKY_DRAWING) {
       triggerActivityCloseUp(me.kind);
     }
   };
@@ -619,7 +1245,39 @@ export async function render(el) {
   const SPOTS = {
     church: { kind: 'church', key: 'church', x: -18, z: 5.3, face: Math.PI },               // in front of the monk / temple steps
     stage: { kind: 'stage', key: 'stage', x: -0.8, z: -5.2, face: Math.atan2(2.8, -4.8) },  // dance floor in front of the stage (not on it)
+    lucky: { kind: 'lucky', key: 'lucky_tree', x: -28.5, z: 8.2, face: Math.PI },           // in front of Lucky Star Tree
   };
+
+  offLucky = mountLuckyStar(el.querySelector('#ls-host'), el.querySelector('#map-page'), {
+    onWalkToTree: async () => {
+      startFollow();
+      let arrived = false;
+      const walkPromise = new Promise(resolve => {
+        SPOTS.lucky.onArrive = () => { arrived = true; resolve(); };
+      });
+      const res = commandSpot(SPOTS.lucky);
+      if (res === 'same' || arrived) {
+        me.showBubble?.('lucky');
+      } else {
+        await walkPromise;
+      }
+      // Camera Zoom in close-up framing ME and tree & lock controls during event
+      flyTo([-28.5, 1.45, 7.65], isMobile ? 3.6 : 3.1);
+      controls.enabled = false;
+      await new Promise(r => setTimeout(r, 850)); // smooth camera ease-in
+    },
+    onHarvestAnimation: async () => {
+      await luckyTree.playHarvestSequence(me);
+    },
+    onCloseModal: () => {
+      controls.enabled = true; // Unlock controls
+      flyTo([-28.5, 0.6, 8.2], isMobile ? 1.55 : 1.35); // Zoom out smoothly
+      luckyTree.resetHarvestState?.();
+      if (me) {
+        me.resetToIdle();
+      }
+    }
+  });
   const blockedToast = () => toast('ME ยังไปจุดนั้นไม่ได้ ลองแตะที่อื่นนะ', 'error');
   function applyCommand(res, target, seat = null, table = null) {
     if (res !== 'ok') return res;
@@ -674,11 +1332,13 @@ export async function render(el) {
     church: isMobile ? 3.3 : 2.7,
     stage:  isMobile ? 3.3 : 2.7,
     dining: isMobile ? 3.3 : 2.8,
+    lucky:  isMobile ? 3.2 : 2.6,
   };
   const ACTIVITY_LEAD = {
     church: 1.2,
     stage:  1.5,
     dining: 0.9,
+    lucky:  1.3,
   };
 
   let anim = null;
@@ -745,11 +1405,13 @@ export async function render(el) {
 
     const isWalking = me.state === ME_STATE.WALKING_TO_CHURCH ||
                       me.state === ME_STATE.WALKING_TO_STAGE ||
-                      me.state === ME_STATE.WALKING_TO_DINING;
+                      me.state === ME_STATE.WALKING_TO_DINING ||
+                      me.state === ME_STATE.WALKING_TO_LUCKY;
 
     const isActivity = me.state === ME_STATE.PRAYING ||
                        me.state === ME_STATE.DANCING ||
-                       me.state === ME_STATE.EATING;
+                       me.state === ME_STATE.EATING ||
+                       me.state === ME_STATE.LUCKY_DRAWING;
 
     if (isWalking) {
       followState = 'walking';
@@ -779,6 +1441,8 @@ export async function render(el) {
       lead = 1.5;
     } else if (me.kind === 'dining') {
       lead = 0.9;
+    } else if (me.kind === 'lucky') {
+      lead = 1.3;
     } else {
       lead = 1.2;
     }
@@ -829,7 +1493,7 @@ export async function render(el) {
   el.querySelector('#me-focus').addEventListener('click', () => {
     stopFollow();
     const my = Number.isFinite(me.y) ? me.y : 0;
-    const isActivity = me.state === ME_STATE.PRAYING || me.state === ME_STATE.DANCING || me.state === ME_STATE.EATING;
+    const isActivity = me.state === ME_STATE.PRAYING || me.state === ME_STATE.DANCING || me.state === ME_STATE.EATING || me.state === ME_STATE.LUCKY_DRAWING;
     const focusZoom = CLOSE_ZOOM[me.kind] || (isMobile ? 3.3 : 2.7);
 
     // If already zoomed in close (> 2.6 on mobile, > 2.0 on desktop), toggle back to overview; otherwise zoom in all the way to focus on ME
@@ -884,6 +1548,8 @@ export async function render(el) {
     const r = renderer.domElement.getBoundingClientRect();
     ndc.set(((clientX - r.left) / r.width) * 2 - 1, -((clientY - r.top) / r.height) * 2 + 1);
     raycaster.setFromCamera(ndc, camera);
+    const tr = raycaster.intersectObjects(treeHits, false)[0];
+    if (tr) return { type: 'lucky' };
     const t = raycaster.intersectObjects(tableHits, false)[0];
     if (t) return { type: 'dining', table: t.object.userData.table, point: t.point };
     const z = raycaster.intersectObjects(hitMeshes, false)[0];
@@ -894,6 +1560,10 @@ export async function render(el) {
     const p = pick(clientX, clientY);
     closeZone(); // close the location detail card and command ME in the same tap
     if (!p) return;
+    if (p.type === 'lucky') {
+      offLucky?.triggerAction?.();
+      return;
+    }
     if (p.type === 'church') commandSpot(SPOTS.church);
     else if (p.type === 'stage') commandSpot(SPOTS.stage);
     else commandDining(p.table, p.point);
@@ -950,22 +1620,12 @@ export async function render(el) {
 
   // ---------- Stats (from data service, not characters) ----------
   recordVisit();
-  const applyStats = async s => {
-    const visitors = el.querySelector('#hs-visitors');
-    const chk = el.querySelector('#hs-chk');
-
-    if (visitors) countUp(visitors, s.visitors || 0);
-    if (chk) countUp(chk, s.checkedIn || 0);
-
+  const applyStats = async () => {
     const latestTicket = await getMyTicket();
     me.setName(latestTicket?.fullName || 'ME');
   };
-  applyStats(await getStats());
+  applyStats();
   const offStats = onStats(applyStats);
-
-  const clockEl = el.querySelector('#map-clock');
-  const clockTick = () => { clockEl.textContent = new Date().toLocaleTimeString('th-TH', { hour: '2-digit', minute: '2-digit' }); };
-  clockTick(); const clockTimer = setInterval(clockTick, 15000);
 
   // ---------- Loop ----------
   const clock = new THREE.Clock();
@@ -1005,6 +1665,7 @@ export async function render(el) {
 
     me.update(dt, t, camera);
     meAvoid.x = me.x; meAvoid.z = me.z;
+    luckyTree.update(dt, t);
     updateAgents(dt, t);
 
     updateCameraFollow(dt);
@@ -1031,10 +1692,11 @@ export async function render(el) {
   const cleanupFn = () => {
     if (activeCleanup === cleanupFn) activeCleanup = null;
     running = false; cancelAnimationFrame(raf);
-    clearInterval(clockTimer); offStats(); ro.disconnect();
+    offStats(); offLucky(); ro.disconnect();
     document.removeEventListener('visibilitychange', onVis);
     controls.dispose();
     me?.dispose?.();
+    luckyTree?.dispose?.();
     disposables.forEach(o => o?.dispose?.());
     [iBody, iHead, iHair, iTop, iLeg, iSeat, iBack, iCenter, iBulb, iFlag].forEach(m => m.dispose());
     renderer.dispose(); renderer.forceContextLoss?.();
