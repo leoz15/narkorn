@@ -435,7 +435,7 @@ export const parseLuckyQr = text => {
 };
 export const formatClaimCode = code => code ? `${code.slice(0, 4)}-${code.slice(4)}` : '';
 
-const DEFAULT_LUCKY_CONFIG = { totalStars: 300, testMode: false };
+const DEFAULT_LUCKY_CONFIG = { totalStars: 300, testMode: true };
 const DEFAULT_PRIZES = [
   { id: 'PZ-01', name: 'พระเครื่องที่ระลึกงานบวช', desc: 'ของที่ระลึกมงคล รุ่นนาคมังกร', emoji: '🪷', image: '', qty: 5 },
   { id: 'PZ-02', name: 'แก้วน้ำลายมังกร', desc: 'แก้วเก็บความเย็น ลายพิเศษเฉพาะงาน', emoji: '🥤', image: '', qty: 15 },
@@ -477,8 +477,69 @@ const readPrizes = () => {
 };
 const readPlays = () => read(KEY.lsPlays, []);
 
+// Cloud sync helpers (Firebase Firestore with seamless localStorage fallback)
+let firestoreModule = null;
+async function getFirestoreModule() {
+  if (firestoreModule) return firestoreModule;
+  if (typeof window === 'undefined') return null;
+  try {
+    const fs = await import('firebase/firestore');
+    const fb = await import('./firebase.js');
+    if (fb.db) {
+      firestoreModule = { ...fs, db: fb.db };
+      return firestoreModule;
+    }
+  } catch (e) {}
+  return null;
+}
+
+async function syncLuckyConfigToCloud(cfg) {
+  try {
+    const fs = await getFirestoreModule();
+    if (!fs || !fs.db) return;
+    await fs.setDoc(fs.doc(fs.db, 'settings', 'luckyConfig'), cfg, { merge: true });
+  } catch (e) {
+    // Graceful fallback: Firestore not yet activated on GCP console
+  }
+}
+
+async function initLuckyCloudSync() {
+  if (typeof window === 'undefined') return;
+  try {
+    const fs = await getFirestoreModule();
+    if (!fs || !fs.db) return;
+    fs.onSnapshot(fs.doc(fs.db, 'settings', 'luckyConfig'), snap => {
+      if (snap.exists()) {
+        const remote = snap.data();
+        const current = read(KEY.lsConfig, {});
+        if (remote && JSON.stringify(remote) !== JSON.stringify(current)) {
+          write(KEY.lsConfig, { ...DEFAULT_LUCKY_CONFIG, ...remote });
+          emit();
+        }
+      }
+    }, () => {});
+  } catch (e) {}
+}
+if (typeof window !== 'undefined') {
+  initLuckyCloudSync();
+}
+
 export function getLuckyConfig() {
-  return { ...DEFAULT_LUCKY_CONFIG, ...read(KEY.lsConfig, {}) };
+  const local = read(KEY.lsConfig, null);
+  // Auto-detect ?test=1, ?testMode=true, or #test in URL and persist to localStorage
+  if (typeof window !== 'undefined') {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      if (sp.get('test') === '1' || sp.get('testMode') === '1' || sp.get('testMode') === 'true' || window.location.hash.includes('test')) {
+        if (!local || !local.testMode) {
+          const patched = { ...DEFAULT_LUCKY_CONFIG, ...(local || {}), testMode: true };
+          write(KEY.lsConfig, patched);
+          return patched;
+        }
+      }
+    } catch (e) {}
+  }
+  return { ...DEFAULT_LUCKY_CONFIG, ...(local || {}) };
 }
 export async function saveLuckyConfig(patch, staff = 'staff') {
   await delay(80);
@@ -488,6 +549,7 @@ export async function saveLuckyConfig(patch, staff = 'staff') {
   write(KEY.lsConfig, cfg);
   audit('lucky.config', { staff, ...cfg });
   emit();
+  syncLuckyConfigToCloud(cfg);
   return cfg;
 }
 

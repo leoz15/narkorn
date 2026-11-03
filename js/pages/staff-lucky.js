@@ -69,11 +69,16 @@ export function renderLuckyAdmin(root, session) {
               <button type="button" class="btn btn-sm" id="lsa-save-total">บันทึก</button>
             </span>
           </label>
-          <label class="lsa-switch">
-            <input type="checkbox" id="lsa-test" ${cfg.testMode ? 'checked' : ''} />
-            <span class="lsa-switch-ui"></span>
-            <span><b>โหมดทดสอบ</b><small>เปิดกิจกรรมก่อนวันงาน (ปิดก่อนใช้งานจริง)</small></span>
-          </label>
+          <div style="display:flex;flex-direction:column;gap:6px">
+            <label class="lsa-switch">
+              <input type="checkbox" id="lsa-test" ${cfg.testMode ? 'checked' : ''} />
+              <span class="lsa-switch-ui"></span>
+              <span><b>โหมดทดสอบ</b><small>เปิดกิจกรรมก่อนวันงาน (ปิดก่อนใช้งานจริง)</small></span>
+            </label>
+            <div class="lsa-inline">
+              <button type="button" class="btn btn-sm" id="lsa-copy-test-link" title="คัดลอกลิงก์ทดสอบสำหรับเปิดในมือถือ">📋 ลิงก์ทดสอบบนมือถือ</button>
+            </div>
+          </div>
         </div>
       </div>
 
@@ -358,6 +363,15 @@ export function renderLuckyAdmin(root, session) {
   $('#lsa-test').addEventListener('change', async e => {
     await saveLuckyConfig({ testMode: e.target.checked }, session.staffName);
     toast(e.target.checked ? '🧪 เปิดโหมดทดสอบ: กิจกรรมเปิดให้เล่นแล้ว' : 'ปิดโหมดทดสอบ: กลับไปใช้วันที่จริง', e.target.checked ? 'ok' : '');
+  });
+  $('#lsa-copy-test-link')?.addEventListener('click', async () => {
+    const testUrl = `${location.origin}${location.pathname}?test=1#/map`;
+    try {
+      await navigator.clipboard.writeText(testUrl);
+      toast('คัดลอกลิงก์ทดสอบแล้ว เปิดในมือถือเพื่อทดสอบได้ทันที', 'ok');
+    } catch {
+      prompt('คัดลอกลิงก์ทดสอบนี้ไปเปิดในมือถือ:', testUrl);
+    }
   });
   $('#lsa-reset').addEventListener('click', async () => {
     if (!confirm('⚠️ ล้างผลการเล่น Lucky Star ทั้งหมด? (สต็อกรางวัลจะกลับมาเต็ม · ไม่ยกเลิกสถานะเช็กอิน)')) return;

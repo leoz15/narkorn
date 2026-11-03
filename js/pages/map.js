@@ -1534,7 +1534,7 @@ export async function render(el) {
     sheet.querySelector('#zone-close').addEventListener('click', closeZone);
     flyTo(z.focus, isMobile ? 1.7 : 1.9);
   }
-  function closeZone() { sheet.classList.remove('open'); labels.forEach(l => l.el.classList.remove('active')); }
+  function closeZone() { sheet.classList.remove('open'); sheet.innerHTML = ''; labels.forEach(l => l.el.classList.remove('active')); }
 
   el.querySelector('#mc-zoom-in').onclick = () => { shouldAdjustZoom = false; flyTo(controls.target.toArray(), Math.min(controls.maxZoom, camera.zoom * 1.35)); };
   el.querySelector('#mc-zoom-out').onclick = () => { shouldAdjustZoom = false; flyTo(controls.target.toArray(), Math.max(controls.minZoom, camera.zoom / 1.35)); };

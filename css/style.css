@@ -331,6 +331,16 @@ button.active:not(.is-outline) .ui-ico .ico-fill,
 .ticket-actions { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; margin-top: 22px; }
 
 /* ---------- Map page ---------- */
+
+/* Lock mobile/desktop screen scrolling strictly on 3D map */
+body[data-route="map"] {
+  overflow: hidden;
+  position: fixed;
+  width: 100%;
+  height: 100%;
+  height: 100dvh;
+}
+
 .map-page { position: relative; height: calc(100vh - var(--topbar-h)); height: calc(100dvh - var(--topbar-h)); overflow: hidden; background: #f3ead9; }
 .map-canvas { position: absolute; inset: 0; }
 .map-canvas canvas { display: block; touch-action: none; }
@@ -440,10 +450,20 @@ button.active:not(.is-outline) .ui-ico .ico-fill,
   width: 10px; height: 10px; background: #fff;
 }
 .zone-sheet {
-  position: absolute; left: 14px; right: 14px; bottom: 14px; z-index: 6; max-width: 560px;
-  padding: 18px 20px; border-radius: 22px; transform: translateY(130%); transition: transform .45s var(--ease);
+  position: absolute; left: 14px; right: 14px; bottom: 20px; z-index: 6; max-width: 560px;
+  padding: 18px 20px; border-radius: 22px;
+  opacity: 0; pointer-events: none; visibility: hidden;
+  transform: translateY(16px) scale(0.97);
+  transition: opacity .3s var(--ease), transform .3s var(--ease), visibility .3s;
 }
-.zone-sheet.open { transform: none; }
+.zone-sheet.open {
+  opacity: 1; pointer-events: auto; visibility: visible;
+  transform: none;
+}
+.zone-sheet:not(.open),
+.zone-sheet:empty {
+  display: none !important;
+}
 .zone-sheet .zs-head { display: flex; gap: 14px; align-items: center; }
 .zone-sheet .zs-ico { width: 56px; height: 56px; border-radius: 16px; display: grid; place-items: center; font-size: 28px; color: #fff; flex: none; }
 .zone-sheet h3 { margin: 0; font-size: 18px; }
@@ -1631,7 +1651,7 @@ button.active:not(.is-outline) .ui-ico .ico-fill,
   .tabbar a span { font-size: 19px; }
   .tabbar a.active { background: var(--cocoa); color: var(--cream); }
   .grid-2, .grid-3, .grid-4 { grid-template-columns: 1fr; }
-  .map-hud { padding: 8px 10px; display: flex; justify-content: center; }
+  .map-hud { padding: 6px 10px; top: 4px; display: flex; justify-content: center; }
   .hud-card { margin: 0 auto; }
   .hud-head { padding: 8px 14px; gap: 10px; justify-content: center; }
   .hud-head .logo { width: 34px; height: 34px; font-size: 17px; border-radius: 10px; }
@@ -1641,9 +1661,13 @@ button.active:not(.is-outline) .ui-ico .ico-fill,
   .map-controls { right: 8px; padding: 4px; }
   .map-controls button { width: 36px; height: 36px; font-size: 15px; }
   .map-label { padding: 6px 14px; font-size: 16px; }
-  .zone-sheet { bottom: 92px; }
+  .zone-sheet {
+    bottom: calc(76px + env(safe-area-inset-bottom));
+    left: 10px; right: 10px;
+    margin: 0 auto;
+  }
   .me-status {
-    bottom: calc(100px + env(safe-area-inset-bottom)); max-width: calc(100vw - 24px);
+    bottom: calc(76px + env(safe-area-inset-bottom)); max-width: calc(100vw - 20px);
     padding: 7px 14px; gap: 8px; font-size: 13px;
   }
   .me-status-ico { font-size: 17px; }

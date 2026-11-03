@@ -1,6 +1,7 @@
 // Import Firebase functions from SDKs
 import { initializeApp } from "firebase/app";
 import { getAnalytics, isSupported } from "firebase/analytics";
+import { getFirestore } from "firebase/firestore";
 
 // Your web app's Firebase configuration
 export const firebaseConfig = {
@@ -15,6 +16,14 @@ export const firebaseConfig = {
 
 // Initialize Firebase
 export const app = initializeApp(firebaseConfig);
+
+// Initialize Firestore (safely exported for cloud sync)
+export let db = null;
+try {
+  db = getFirestore(app);
+} catch (e) {
+  console.warn("Firestore initialization skipped:", e);
+}
 
 // Initialize Analytics (safely check browser environment support)
 export let analytics = null;
