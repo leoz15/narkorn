@@ -1,6 +1,6 @@
 import {
   EVENT, registerGuest, saveMyTicket, getMyTicket, getByToken,
-  findByPhone, clearMyTicket, isValidThaiPhone, ApiError, onStats
+  findByPhone, clearMyTicket, updateMyTicketGender, isValidThaiPhone, ApiError, onStats
 } from '../store.js';
 import { esc, toast, footer } from '../ui.js';
 import { ticketCard, bindTicketActions } from './ticket.js';
@@ -24,11 +24,10 @@ export async function render(el, params = {}) {
     if (activeTab === 'ticket' && currentTicket) {
       el.innerHTML = `
       <section class="page container">
-        <div class="checkin-head" style="text-align:center;max-width:560px;margin:0 auto 28px">
-          <span class="eyebrow">E-Ticket · Check-in</span>
-          <h1 style="font-family:var(--hand);font-size:clamp(34px, 5vw, 48px);margin:6px 0 10px">Checkin</h1>
+        <div class="checkin-head" style="text-align:center;max-width:600px;margin:0 auto 28px">
+          <h1 style="font-family:var(--hand);font-size:clamp(34px, 5vw, 48px);margin:6px 0 10px">บัตรผู้ร่วมงาน</h1>
           <p style="color:var(--cocoa-2);font-size:15px;margin:0">
-            แสดง QR Code ด้านล่างนี้ต่อเจ้าหน้าที่ ณ จุดลงทะเบียน / เช็กอินเข้างาน
+            ยินดีต้อนรับสู่งานบวชมังกรพร้อมสิทธิ์ร่วมกิจกรรมพิเศษภายในงาน
           </p>
         </div>
 
@@ -37,18 +36,17 @@ export async function render(el, params = {}) {
         </div>
 
         <div class="ticket-actions" style="margin-top:24px">
-          <button class="btn btn-rose btn-lg" id="btn-save-ticket">⬇️ บันทึกตั๋วลงเครื่อง</button>
-          ${currentTicket.status === 'checked_in'
-          ? `<a href="#/polaroid" class="btn btn-primary btn-lg" id="btn-go-polaroid">📸 สร้างภาพ Polaroid</a>`
-          : `<a href="#/map" class="btn btn-lg" id="btn-go-map">🗺️ ดูแผนที่งาน 3D</a>`}
+          <button class="btn btn-rose btn-lg" id="btn-save-ticket">⬇️ บันทึกบัตรลงเครื่อง</button>
         </div>
 
-        <div class="card glass" style="max-width:460px;margin:32px auto 0;text-align:center;padding:18px 24px">
-          <div style="font-size:14px;color:var(--cocoa-2);margin-bottom:12px">ต้องการลงทะเบียนให้ผู้ร่วมงานท่านอื่น หรือค้นหาตั๋วอื่น?</div>
-          <div style="display:flex;gap:10px;justify-content:center;flex-wrap:wrap">
-            <button class="btn btn-sm btn-dark" id="btn-add-guest">➕ ลงทะเบียนเพิ่ม</button>
-            <button class="btn btn-sm" id="btn-search-other">🔍 ค้นหาด้วยเบอร์โทร</button>
-            <button class="btn btn-sm btn-ghost" id="btn-forget" style="color:var(--rose-d)">สลับตั๋ว</button>
+        <div class="card glass ticket-gender-box" style="max-width:460px;margin:18px auto 0;display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-radius:18px">
+          <div style="text-align:left">
+            <strong style="font-size:13.5px;color:var(--cocoa);display:block">เพศตัวละครในแผนที่ 3D</strong>
+            <span style="font-size:12px;color:var(--cocoa-2)">แตะเปลี่ยนเพศตัวละครของคุณได้ตลอดเวลา</span>
+          </div>
+          <div style="display:flex;gap:6px">
+            <button type="button" class="btn btn-sm ${currentTicket.gender !== 'female' ? 'btn-primary' : 'btn-ghost'}" id="btn-toggle-male">👦 ชาย</button>
+            <button type="button" class="btn btn-sm ${currentTicket.gender === 'female' ? 'btn-primary' : 'btn-ghost'}" id="btn-toggle-female">👧 หญิง</button>
           </div>
         </div>
       </section>
@@ -56,19 +54,23 @@ export async function render(el, params = {}) {
 
       bindTicketActions(el, currentTicket);
 
-      el.querySelector('#btn-add-guest')?.addEventListener('click', () => {
-        activeTab = 'form'; subTab = 'register'; paint();
+      el.querySelector('#btn-toggle-male')?.addEventListener('click', () => {
+        if (currentTicket.gender !== 'male') {
+          updateMyTicketGender('male');
+          currentTicket.gender = 'male';
+          toast('เปลี่ยนตัวละครเป็นเพศชาย 👦 แล้ว', 'ok');
+          paint();
+        }
       });
-      el.querySelector('#btn-search-other')?.addEventListener('click', () => {
-        activeTab = 'form'; subTab = 'find'; paint();
+      el.querySelector('#btn-toggle-female')?.addEventListener('click', () => {
+        if (currentTicket.gender !== 'female') {
+          updateMyTicketGender('female');
+          currentTicket.gender = 'female';
+          toast('เปลี่ยนตัวละครเป็นเพศหญิง 👧 แล้ว', 'ok');
+          paint();
+        }
       });
-      el.querySelector('#btn-forget')?.addEventListener('click', () => {
-        clearMyTicket();
-        currentTicket = null;
-        activeTab = 'form';
-        subTab = 'register';
-        paint();
-      });
+
       return;
     }
 
@@ -77,32 +79,32 @@ export async function render(el, params = {}) {
     <section class="page container">
       <div class="reg-wrap">
         <div class="reg-side">
-          <span class="eyebrow">Registration & Ticket</span>
-          <h1 style="font-family:var(--hand);font-size:clamp(34px, 5vw, 52px)">Checkin</h1>
-          <p style="color:var(--cocoa-2)">ลงทะเบียนรับ QR Code ประจำตัว หรือค้นหาตั๋วเดิมเพื่อใช้เช็กอินเข้างาน</p>
+          <span class="eyebrow">22 พฤศจิกาขอลาบวช</span>
+          <h1 style="font-family:var(--hand);font-size:clamp(34px, 5vw, 52px)">บัตรผู้ร่วมงาน</h1>
+          <p style="color:var(--cocoa-2)">ลงทะเบียนเข้าร่วมงานบวชมังกร รับบัตรประจำตัว (E-Badge) เพื่อร่วมกิจกรรมและรับสิทธิ์พิเศษ</p>
 
           <ol class="steps">
-            <li><span class="n">1</span><p><strong>กรอกชื่อและเบอร์โทร</strong> หรือค้นหาตั๋วเดิมที่เคยลงทะเบียน</p></li>
-            <li><span class="n">2</span><p><strong>รับ QR Ticket ทันที</strong> บันทึกลงเครื่องหรือแคปหน้าจอไว้</p></li>
-            <li><span class="n">3</span><p><strong>แสดง QR ที่จุดเช็กอิน</strong> เจ้าหน้าที่สแกนเข้างาน และปลดล็อกสิทธิ์พิเศษ</p></li>
+            <li><span class="n">1</span><p><strong>กรอกชื่อและเบอร์โทร</strong> หรือค้นหาบัตรเดิมที่เคยลงทะเบียน</p></li>
+            <li><span class="n">2</span><p><strong>รับบัตร E-Badge ทันที</strong> บันทึกลงเครื่องหรือแคปหน้าจอไว้</p></li>
+            <li><span class="n">3</span><p><strong>รับสิทธิ์พิเศษในงาน</strong> ถ่ายภาพ Polaroid ย้อนยุค & สอยดาวลุ้นรางวัล</p></li>
           </ol>
 
           ${currentTicket ? `
             <div class="card glass" style="display:flex;gap:14px;align-items:center;border-left:4px solid var(--saffron);margin-top:20px">
               <span style="font-size:30px">🎫</span>
               <div style="flex:1">
-                <strong style="font-size:14px">คุณมีตั๋วในเครื่องนี้แล้ว</strong>
+                <strong style="font-size:14px">คุณมีบัตรในเครื่องนี้แล้ว</strong>
                 <div style="font-size:13px;color:var(--cocoa-2)">${esc(currentTicket.id)} · ${esc(currentTicket.fullName)}</div>
               </div>
-              <button class="btn btn-sm btn-primary" id="btn-back-to-ticket">ดูตั๋วของฉัน →</button>
+              <button class="btn btn-sm btn-primary" id="btn-back-to-ticket">ดูบัตรของฉัน →</button>
             </div>` : ''}
         </div>
 
         <div id="checkin-panel">
           <div class="card" style="padding:28px">
             <div class="checkin-tabs" role="tablist">
-              <button class="checkin-tab ${subTab === 'register' ? 'active' : ''}" id="tab-sub-reg">📝 ลงทะเบียนรับ QR</button>
-              <button class="checkin-tab ${subTab === 'find' ? 'active' : ''}" id="tab-sub-find">🔍 มีตั๋วแล้ว / ค้นหา</button>
+              <button class="checkin-tab ${subTab === 'register' ? 'active' : ''}" id="tab-sub-reg">📝 ลงทะเบียนรับบัตร</button>
+              <button class="checkin-tab ${subTab === 'find' ? 'active' : ''}" id="tab-sub-find">🔍 มีบัตรแล้ว / ค้นหา</button>
             </div>
 
             ${subTab === 'register' ? `
@@ -114,28 +116,43 @@ export async function render(el, params = {}) {
                   <span class="err" data-for="fullName"></span>
                 </div>
                 <div class="field">
+                  <label>ระบุเพศ (สำหรับตัวละครในแผนที่ 3D)</label>
+                  <div class="gender-selector" role="radiogroup" aria-label="ระบุเพศ">
+                    <label class="gender-option active" data-gender="male">
+                      <input type="radio" name="gender" value="male" checked />
+                      <span class="gender-ico">👦</span>
+                      <span class="gender-text">ชาย</span>
+                    </label>
+                    <label class="gender-option" data-gender="female">
+                      <input type="radio" name="gender" value="female" />
+                      <span class="gender-ico">👧</span>
+                      <span class="gender-text">หญิง</span>
+                    </label>
+                  </div>
+                </div>
+                <div class="field">
                   <label for="reg-phone">เบอร์โทรศัพท์</label>
                   <input class="input" id="reg-phone" name="phone" type="tel" inputmode="numeric" autocomplete="tel" placeholder="08x-xxx-xxxx" maxlength="12" required />
-                  <small>เบอร์โทรใช้สำหรับค้นหาตั๋วและตรวจสอบการลงทะเบียนเท่านั้น</small>
+                  <small>เบอร์โทรใช้สำหรับค้นหาบัตรและตรวจสอบการลงทะเบียนเท่านั้น</small>
                   <span class="err" data-for="phone"></span>
                 </div>
                 <label class="check" for="reg-consent">
                   <input type="checkbox" id="reg-consent" name="consent" checked />
-                  <span>ยินยอมให้ผู้จัดงานเก็บชื่อและเบอร์โทรเพื่อใช้ในการเช็กอินงานนี้เท่านั้น</span>
+                  <span>ยินยอมให้ผู้จัดงานเก็บชื่อและเบอร์โทรเพื่อใช้ในการร่วมงานนี้เท่านั้น</span>
                 </label>
                 <span class="err" data-for="consent"></span>
-                <button class="btn btn-primary btn-lg btn-block" id="reg-submit" style="margin-top:18px">รับ QR Checkin ✨</button>
+                <button class="btn btn-primary btn-lg btn-block" id="reg-submit" style="margin-top:18px">รับบัตร E-Badge ✨</button>
               </form>
             ` : `
               <form id="find-form" novalidate>
-                <h2 style="font-size:20px;margin-bottom:8px">ค้นหาตั๋วด้วยเบอร์โทร</h2>
-                <p style="color:var(--cocoa-2);font-size:14px;margin-bottom:18px">กรอกเบอร์โทรศัพท์ที่คุณเคยใช้ลงทะเบียนไว้ เพื่อดึง QR Ticket กลับมาแสดงบนอุปกรณ์นี้</p>
+                <h2 style="font-size:20px;margin-bottom:8px">ค้นหาบัตรด้วยเบอร์โทร</h2>
+                <p style="color:var(--cocoa-2);font-size:14px;margin-bottom:18px">กรอกเบอร์โทรศัพท์ที่คุณเคยใช้ลงทะเบียนไว้ เพื่อดึงบัตรประจำตัวกลับมาแสดงบนอุปกรณ์นี้</p>
                 <div class="field">
                   <label for="find-phone">เบอร์โทรศัพท์ที่เคยลงทะเบียน</label>
                   <input class="input" id="find-phone" name="phone" type="tel" inputmode="numeric" placeholder="08x-xxx-xxxx" maxlength="12" required />
                   <span class="err" data-for="findPhone"></span>
                 </div>
-                <button class="btn btn-dark btn-lg btn-block" id="find-submit" style="margin-top:10px">🔍 ค้นหาตั๋ว</button>
+                <button class="btn btn-dark btn-lg btn-block" id="find-submit" style="margin-top:10px">🔍 ค้นหาบัตร</button>
               </form>
             `}
           </div>
@@ -160,6 +177,15 @@ export async function render(el, params = {}) {
       const phoneInput = el.querySelector('#reg-phone');
       phoneInput?.addEventListener('input', () => { phoneInput.value = formatPhone(phoneInput.value); });
 
+      form?.querySelectorAll('.gender-option').forEach(opt => {
+        opt.addEventListener('click', () => {
+          form.querySelectorAll('.gender-option').forEach(o => o.classList.remove('active'));
+          opt.classList.add('active');
+          const radio = opt.querySelector('input[type="radio"]');
+          if (radio) radio.checked = true;
+        });
+      });
+
       const setErr = (k, msg) => {
         const e = form.querySelector(`[data-for="${k}"]`); if (e) e.textContent = msg || '';
         form.querySelector(`[name="${k}"]`)?.classList.toggle('invalid', !!msg);
@@ -167,7 +193,8 @@ export async function render(el, params = {}) {
 
       form?.addEventListener('submit', async (e) => {
         e.preventDefault();
-        const data = { fullName: form.fullName.value, phone: form.phone.value, consent: form.consent.checked };
+        const gender = form.querySelector('input[name="gender"]:checked')?.value || 'male';
+        const data = { fullName: form.fullName.value, phone: form.phone.value, consent: form.consent.checked, gender };
         let ok = true;
         setErr('fullName'); setErr('phone'); setErr('consent');
         if (data.fullName.trim().length < 2) { setErr('fullName', 'กรุณากรอกชื่อเล่น,ชื่อในวงการ,ชื่อทางการ'); ok = false; }

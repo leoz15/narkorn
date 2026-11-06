@@ -157,6 +157,49 @@ export function mountLuckyStar(host, stage = document.body, opts = {}) {
   modal.addEventListener('click', e => {
     if (e.target.closest('[data-close]')) closeModal();
     if (e.target.closest('[data-go-checkin]')) { closeModal(); location.hash = '#/checkin'; }
+    const copyBtn = e.target.closest('[data-copy-code]');
+    if (copyBtn) {
+      const code = copyBtn.getAttribute('data-copy-code') || copyBtn.textContent.trim();
+      if (code) {
+        const doCopy = async () => {
+          try {
+            await navigator.clipboard.writeText(code);
+            return true;
+          } catch {
+            try {
+              const ta = document.createElement('textarea');
+              ta.value = code;
+              ta.style.position = 'fixed';
+              ta.style.opacity = '0';
+              document.body.appendChild(ta);
+              ta.select();
+              const ok = document.execCommand('copy');
+              document.body.removeChild(ta);
+              return ok;
+            } catch {
+              return false;
+            }
+          }
+        };
+        doCopy().then(ok => {
+          if (ok) {
+            toast(`คัดลอกรหัส ${code} แล้ว 📋`, 'ok');
+            copyBtn.classList.add('copied');
+            const lbl = copyBtn.querySelector('.ls-copy-label');
+            const ico = copyBtn.querySelector('.ls-copy-ico');
+            if (lbl) lbl.textContent = 'คัดลอกแล้ว';
+            if (ico) ico.innerHTML = '<polyline points="20 6 9 17 4 12"></polyline>';
+            setTimeout(() => {
+              copyBtn.classList.remove('copied');
+              if (lbl) lbl.textContent = 'คัดลอก';
+              if (ico) ico.innerHTML = '<rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect><path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>';
+            }, 1800);
+          } else {
+            toast('ไม่สามารถคัดลอกได้', 'err');
+          }
+        });
+      }
+    }
   });
 
   function showDrawing() {
@@ -200,9 +243,18 @@ export function mountLuckyStar(host, stage = document.body, opts = {}) {
         ` : `
           <div class="ls-qr">
             <img src="${qr}" alt="QR Code สำหรับรับรางวัล" />
-            <div class="ls-code">${esc(formatClaimCode(play.claimCode))}</div>
+            <button type="button" class="ls-code" data-copy-code="${esc(formatClaimCode(play.claimCode))}" title="แตะเพื่อคัดลอกรหัส" aria-label="คัดลอกรหัส ${esc(formatClaimCode(play.claimCode))}">
+              <span class="ls-code-text">${esc(formatClaimCode(play.claimCode))}</span>
+              <span class="ls-copy-badge">
+                <svg class="ls-copy-ico" viewBox="0 0 24 24" width="13" height="13" fill="none" stroke="currentColor" stroke-width="2.2" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">
+                  <rect x="9" y="9" width="13" height="13" rx="2" ry="2"></rect>
+                  <path d="M5 15H4a2 2 0 0 1-2-2V4a2 2 0 0 1 2-2h9a2 2 0 0 1 2 2v1"></path>
+                </svg>
+                <span class="ls-copy-label">คัดลอก</span>
+              </span>
+            </button>
           </div>
-          <p class="ls-res-note"><b>กรุณาแสดง QR Code นี้ที่จุดรับรางวัล</b><br/>ใช้ยืนยันรับรางวัลได้ 1 ครั้งเท่านั้น</p>
+          <p class="ls-res-note"><b>กรุณาแสดง QR Code หรือแจ้งรหัสที่จุดรับรางวัล</b><br/>แตะที่รหัสเพื่อคัดลอก · ใช้ยืนยันได้ 1 ครั้งเท่านั้น</p>
         `}
         <button type="button" class="btn btn-primary btn-block" data-close>กลับสู่แผนที่ 3D</button>
       `, redeemed ? 'redeemed' : 'won');

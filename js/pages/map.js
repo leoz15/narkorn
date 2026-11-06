@@ -23,8 +23,8 @@ const ME_STATUS = {
   [ME_STATE.IDLE]: ['👆', 'แตะ <b>ต้นไม้สอยดาว</b> · <b>โบสถ์</b> · <b>เวที</b> · <b>โต๊ะอาหาร</b> เพื่อพา ME ไปทำกิจกรรม'],
   [ME_STATE.WALKING_TO_CHURCH]: ['🚶', 'ME กำลังเดินไปหน้าพระ…'],
   [ME_STATE.PRAYING]: ['🙏', 'ME กำลังไหว้พระ · <b>สาธุ</b>'],
-  [ME_STATE.WALKING_TO_STAGE]: ['🚶', 'ME กำลังเดินไปหน้าเวที…'],
-  [ME_STATE.DANCING]: ['💃', 'ME กำลังเต้นหน้าเวที · <b>ม่วนคักๆ</b>'],
+  [ME_STATE.WALKING_TO_STAGE]: ['🚶', 'ME กำลังเดินขึ้นเวที…'],
+  [ME_STATE.DANCING]: ['💃', 'ME กำลังเต้นบนเวที · <b>ม่วนคักๆ</b>'],
   [ME_STATE.WALKING_TO_DINING]: ['🚶', 'ME กำลังเดินไปโต๊ะอาหาร…'],
   [ME_STATE.EATING]: ['🍚', 'ME กำลังรับประทานอาหาร · <b>อนุโมทนาบุญ</b>'],
   [ME_STATE.WALKING_TO_LUCKY]: ['🚶', 'ME กำลังเดินไปต้นไม้สอยดาว…'],
@@ -929,8 +929,8 @@ export async function render(el) {
   // ---------- Zone 2: Music stage + grouped tables ----------
   const stage = new THREE.Group(); stage.position.set(2, 0, -10); world.add(stage);
   box(13, 1.1, 6.5, COL.stage, 0, 0, 0, stage);
-  box(13.1, 0.06, 6.6, '#34282a', 0, 1.1, 0, stage);
-  for (let i = 0; i < 3; i++) box(2.4, 0.37 * (i + 1), 0.45, COL.woodD, 0, 0, 3.5 + (2 - i) * 0.45, stage);
+  walkables.push(box(13.1, 0.06, 6.6, '#34282a', 0, 1.1, 0, stage));
+  for (let i = 0; i < 3; i++) walkables.push(box(2.4, 0.37 * (i + 1), 0.45, COL.woodD, 0, 0, 3.5 + (2 - i) * 0.45, stage));
   box(13, 5.5, 0.35, '#3a2f4a', 0, 1.1, -3.1, stage);
   const screenMat = new THREE.MeshStandardMaterial({ color: '#221a33', emissive: '#7a4fd1', emissiveIntensity: 0.9, roughness: .4 });
   disposables.push(screenMat);
@@ -1211,8 +1211,15 @@ export async function render(el) {
   nav.blockCircle(-18, 2.6, 1.5, PAD);                                            // monk mascot pedestal
   nav.blockCircle(-19.0, 12.0, 0.85, PAD);                                          // lucky star tree base
   nav.blockCircle(-9, 5.5, 0.12, PAD);                                            // flag pole
-  nav.blockRect(-4.5, 8.5, -13.25, -6.75, PAD);                                   // stage deck + truss
-  nav.blockRect(0.8, 3.2, -6.75, -5.4, PAD);                                      // stage stairs
+  // Stage obstacles: back wall, sides & speakers, drop-offs, performers & instruments (stairs & center stage dance area stay open)
+  nav.blockRect(-4.5, 8.5, -13.25, -11.5, PAD);                                   // stage back wall & screen
+  nav.blockRect(-4.8, -3.0, -13.25, -6.75, PAD);                                  // stage left side truss & speaker
+  nav.blockRect(7.0, 8.8, -13.25, -6.75, PAD);                                    // stage right side truss & speaker
+  nav.blockRect(-4.5, 0.8, -7.2, -6.6, PAD);                                      // front edge drop-off (left of stairs)
+  nav.blockRect(3.2, 8.5, -7.2, -6.6, PAD);                                       // front edge drop-off (right of stairs)
+  nav.blockRect(-2.0, 6.0, -11.5, -9.6, PAD);                                     // drum set, keyboard, instruments
+  nav.blockCircle(1.5, -8.4, 0.4, PAD);                                           // stage singer 1
+  nav.blockCircle(3.0, -8.4, 0.4, PAD);                                           // stage singer 2
   for (const x of [-5.6, 9.6]) nav.blockRect(x - 0.65, x + 0.65, -8, -6.8, PAD);  // floor speakers
   poles.forEach(([x, z]) => nav.blockCircle(x, z, 0.12, PAD));                    // light poles
   tableSpots.forEach(([x, z]) => nav.blockCircle(x, z, 1.0, PAD));                // tables
@@ -1257,12 +1264,13 @@ export async function render(el) {
     startFace: Math.PI / 4,
     onState: showStatus,
     name: myTicket?.fullName || 'ME',
+    gender: myTicket?.gender || 'male',
   });
   showStatus(ME_STATE.IDLE);
 
   const SPOTS = {
     church: { kind: 'church', key: 'church', x: -18, z: 5.3, face: Math.PI },               // in front of the monk / temple steps
-    stage: { kind: 'stage', key: 'stage', x: -0.8, z: -5.2, face: Math.atan2(2.8, -4.8) },  // dance floor in front of the stage (not on it)
+    stage: { kind: 'stage', key: 'stage', x: 0.2, z: -8.4, face: 0.0 },                     // on stage dancing with the band under the spotlight
     lucky: { kind: 'lucky', key: 'lucky_tree', x: -19.0, z: 13.4, face: Math.PI },           // in front of Lucky Star Tree (across from the monk)
   };
 
@@ -1469,7 +1477,7 @@ export async function render(el) {
     _desiredTarget.set(me.x, my + 0.6, me.z).addScaledVector(_camDir, lead);
 
     // Smooth exponential damping (fluid tracking without warping)
-    const lambda = isUserInteracting ? 2.2 : (followState === 'walking' ? 4.2 : 3.2);
+    const lambda = isUserInteracting ? 2.2 : (followState === 'walking' ? 5.2 : 3.2);
     const factor = 1 - Math.exp(-lambda * dt);
 
     const dx = (_desiredTarget.x - controls.target.x) * factor;
@@ -1658,6 +1666,7 @@ export async function render(el) {
   const applyStats = async () => {
     const latestTicket = await getMyTicket();
     me.setName(latestTicket?.fullName || 'ME');
+    me.setGender?.(latestTicket?.gender || 'male');
   };
   applyStats();
   const offStats = onStats(applyStats);

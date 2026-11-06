@@ -262,7 +262,7 @@ export class ApiError extends Error {
 }
 
 export async function registerGuest({
-  fullName, phone, consent, source = 'online', staff = null,
+  fullName, phone, consent, gender = 'male', source = 'online', staff = null,
   autoCheckIn = false, pax = 1, note = ''
 }) {
   await delay(300);
@@ -289,6 +289,7 @@ export async function registerGuest({
     token: secureToken(),
     fullName: name,
     phone: tel,
+    gender: (gender === 'female' ? 'female' : 'male'),
     pax: partySize,
     note: String(note || '').trim(),
     source,
@@ -310,6 +311,7 @@ function publicView(r) {
     id: r.id,
     token: r.token,
     fullName: r.fullName,
+    gender: r.gender || 'male',
     phone: r.phone || '',
     phoneMasked: r.phone ? maskPhone(r.phone) : '-',
     pax: Number(r.pax) || 1,
@@ -402,6 +404,19 @@ export async function getMyTicket() {
   const ref = getMyTicketRef();
   return ref ? getByToken(ref.token) : null;
 }
+export function updateMyTicketGender(gender) {
+  const ref = getMyTicketRef();
+  if (!ref) return null;
+  const g = gender === 'female' ? 'female' : 'male';
+  const regs = read(KEY.regs, []);
+  const idx = regs.findIndex(r => r.id === ref.id || r.token === ref.token);
+  if (idx >= 0) {
+    regs[idx].gender = g;
+    write(KEY.regs, regs);
+  }
+  emit();
+  return g;
+}
 
 /* ---------------- Polaroid content (Admin-managed later) ---------------- */
 export async function getQuotes() { return read(KEY.quotes, DEFAULT_QUOTES); }
@@ -438,9 +453,9 @@ export const formatClaimCode = code => code ? `${code.slice(0, 4)}-${code.slice(
 
 const DEFAULT_LUCKY_CONFIG = { totalStars: 300, testMode: true };
 const DEFAULT_PRIZES = [
-  { id: 'PZ-01', name: 'พระเครื่องที่ระลึกงานบวช', desc: 'ของที่ระลึกมงคล รุ่นนาคมังกร', emoji: '🪷', image: '', qty: 5 },
-  { id: 'PZ-02', name: 'แก้วน้ำลายมังกร', desc: 'แก้วเก็บความเย็น ลายพิเศษเฉพาะงาน', emoji: '🥤', image: '', qty: 15 },
-  { id: 'PZ-03', name: 'พวงกุญแจดาวนำโชค', desc: 'พวงกุญแจรูปดาวสีทอง', emoji: '⭐', image: '', qty: 30 },
+  { id: 'PZ-01', name: 'แก้วน้ำลายมังกร', desc: 'แก้วเก็บความเย็น ลายพิเศษเฉพาะงาน', emoji: '🥤', image: '', qty: 20 },
+  { id: 'PZ-02', name: 'พวงกุญแจที่เปิดขวด', desc: 'พวงกุญแจพร้อมที่เปิดขวด ที่ระลึกงานบวช', emoji: '⭐', image: '', qty: 50 },
+  { id: 'PZ-03', name: 'ชุดหมอนที่ระลึก', desc: 'ชุดหมอนพรีเมียม ที่ระลึกงานบวช', emoji: '🛏️', image: '', qty: 7 },
 ];
 
 const CLAIM_ALPHABET = 'ABCDEFGHJKLMNPQRSTUVWXYZ23456789'; // no 0/O/1/I
@@ -471,10 +486,12 @@ async function withLuckyLock(fn) {
 }
 
 const readPrizes = () => {
-  const p = read(KEY.lsPrizes, null);
-  if (p) return p;
-  write(KEY.lsPrizes, DEFAULT_PRIZES);
-  return DEFAULT_PRIZES.slice();
+  let p = read(KEY.lsPrizes, null);
+  if (!p || (Array.isArray(p) && p.some(item => item.name?.includes('พระเครื่อง')))) {
+    write(KEY.lsPrizes, DEFAULT_PRIZES);
+    return DEFAULT_PRIZES.slice();
+  }
+  return p;
 };
 const readPlays = () => read(KEY.lsPlays, []);
 
