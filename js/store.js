@@ -182,7 +182,15 @@ function secureToken() {
 }
 
 function nextRegId() {
-  const n = (read(KEY.seq, 0) || 0) + 1;
+  const regs = read(KEY.regs, []);
+  let maxNum = read(KEY.seq, 0) || 0;
+  for (const r of regs) {
+    if (r.id && r.id.startsWith('MF-')) {
+      const num = parseInt(r.id.slice(3), 10);
+      if (!isNaN(num) && num > maxNum) maxNum = num;
+    }
+  }
+  const n = maxNum + 1;
   write(KEY.seq, n);
   return 'MF-' + String(n).padStart(4, '0');
 }
@@ -230,6 +238,136 @@ if (typeof window !== 'undefined') {
   });
 }
 
+/* ---------------- Cloud Database (Firebase Firestore) ---------------- */
+let firestoreModule = null;
+let firestoreLoadPromise = null;
+async function getFirestoreModule() {
+  if (firestoreModule) return firestoreModule;
+  if (typeof window === 'undefined') return null;
+  if (firestoreLoadPromise) return firestoreLoadPromise;
+  firestoreLoadPromise = (async () => {
+    try {
+      const fs = await import('firebase/firestore');
+      const fb = await import('./firebase.js');
+      if (fb.db) {
+        firestoreModule = { ...fs, db: fb.db };
+        return firestoreModule;
+      }
+    } catch (e) {
+      console.warn('Firestore load failed:', e);
+    }
+    return null;
+  })();
+  return firestoreLoadPromise;
+}
+
+let cloudSyncStatus = {
+  active: false,
+  state: 'connecting', // 'connecting' | 'connected' | 'error'
+  error: null,
+  lastSyncAt: null,
+};
+
+export function getCloudSyncStatus() {
+  return { ...cloudSyncStatus };
+}
+
+async function syncRegistrationToCloud(reg) {
+  try {
+    const fs = await getFirestoreModule();
+    if (!fs?.db || !reg?.id) return;
+    await fs.setDoc(fs.doc(fs.db, 'registrations', reg.id), reg, { merge: true });
+  } catch (e) {
+    console.warn('Sync reg to cloud failed:', e);
+  }
+}
+
+async function updateRegistrationInCloud(id, patch) {
+  try {
+    const fs = await getFirestoreModule();
+    if (!fs?.db || !id) return;
+    await fs.setDoc(fs.doc(fs.db, 'registrations', id), patch, { merge: true });
+  } catch (e) {
+    console.warn('Update reg in cloud failed:', e);
+  }
+}
+
+async function deleteRegistrationFromCloud(id) {
+  try {
+    const fs = await getFirestoreModule();
+    if (!fs?.db || !id) return;
+    await fs.deleteDoc(fs.doc(fs.db, 'registrations', id));
+  } catch (e) {
+    console.warn('Delete reg from cloud failed:', e);
+  }
+}
+
+let registrationsSyncInitialized = false;
+async function initRegistrationsCloudSync() {
+  if (typeof window === 'undefined' || registrationsSyncInitialized) return;
+  try {
+    const fs = await getFirestoreModule();
+    if (!fs || !fs.db) {
+      cloudSyncStatus.state = 'error';
+      cloudSyncStatus.error = 'Firebase Firestore db is not initialized';
+      emit();
+      return;
+    }
+    registrationsSyncInitialized = true;
+    cloudSyncStatus.state = 'connecting';
+
+    fs.onSnapshot(fs.collection(fs.db, 'registrations'), (snapshot) => {
+      cloudSyncStatus.active = true;
+      cloudSyncStatus.state = 'connected';
+      cloudSyncStatus.error = null;
+      cloudSyncStatus.lastSyncAt = new Date().toISOString();
+
+      const cloudRegs = [];
+      snapshot.forEach(docSnap => {
+        const d = docSnap.data();
+        if (d && d.id) cloudRegs.push(d);
+      });
+
+      const localRegs = read(KEY.regs, []);
+      const map = new Map();
+
+      // Local entries first
+      localRegs.forEach(r => { if (r.id) map.set(r.id, r); });
+      // Overwrite with cloud entries (source of truth)
+      cloudRegs.forEach(r => { if (r.id) map.set(r.id, r); });
+
+      // If local has real registrations missing from cloud, push them up
+      localRegs.forEach(r => {
+        if (r.id && !r.demo && !cloudRegs.some(c => c.id === r.id)) {
+          syncRegistrationToCloud(r);
+        }
+      });
+
+      const merged = Array.from(map.values());
+      merged.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+      write(KEY.regs, merged);
+      emit();
+    }, (err) => {
+      cloudSyncStatus.active = false;
+      cloudSyncStatus.state = 'error';
+      cloudSyncStatus.error = err?.code === 'permission-denied'
+        ? 'สิทธิ์การเข้าถึงถูกบล็อก (Permission Denied): กรุณาเปิด Rules ใน Firebase Console ให้เป็น allow read, write: if true;'
+        : (err?.message || 'ไม่สามารถเชื่อมต่อ Firestore ได้ (อาจยังไม่ได้กด Create Database ใน Firebase Console)');
+      console.warn('Firestore registrations snapshot warning:', err);
+      emit();
+    });
+  } catch (e) {
+    cloudSyncStatus.active = false;
+    cloudSyncStatus.state = 'error';
+    cloudSyncStatus.error = e?.message || 'เกิดข้อผิดพลาดในการเชื่อมต่อ Firestore';
+    console.warn('initRegistrationsCloudSync exception:', e);
+    emit();
+  }
+}
+if (typeof window !== 'undefined') {
+  initRegistrationsCloudSync();
+}
+
 function computeStats() {
   const regs = read(KEY.regs, []).filter(r => r.status !== 'cancelled');
   const sumPax = list => list.reduce((acc, r) => acc + (Number(r.pax) || 1), 0);
@@ -248,6 +386,7 @@ function computeStats() {
     onsite: sumPax(onsiteList),
     visitors: getVisitorCount(),
     target: EVENT.target,
+    cloudSync: getCloudSyncStatus(),
   };
 }
 
@@ -265,7 +404,7 @@ export async function registerGuest({
   fullName, phone, consent, gender = 'male', source = 'online', staff = null,
   autoCheckIn = false, pax = 1, note = ''
 }) {
-  await delay(300);
+  await delay(250);
   const name = String(fullName || '').trim().replace(/\s+/g, ' ');
   const tel = normalizePhone(phone);
   const isOnsite = source === 'onsite';
@@ -277,6 +416,29 @@ export async function registerGuest({
   }
   if (!isOnsite && !consent) throw new ApiError('VALIDATION', 'กรุณายอมรับเงื่อนไขการใช้ข้อมูล');
 
+  // Check duplicate in Firestore if cloud is ready
+  try {
+    const fs = await getFirestoreModule();
+    if (fs?.db && tel) {
+      const q = fs.query(fs.collection(fs.db, 'registrations'), fs.where('phone', '==', tel));
+      const snap = await fs.getDocs(q);
+      if (!snap.empty) {
+        const existing = snap.docs.map(d => d.data()).find(d => d && d.status !== 'cancelled');
+        if (existing) {
+          const regs = read(KEY.regs, []);
+          if (!regs.some(r => r.id === existing.id)) {
+            regs.push(existing);
+            write(KEY.regs, regs);
+          }
+          throw new ApiError('DUPLICATE', 'เบอร์นี้ลงทะเบียนไว้แล้ว', publicView(existing));
+        }
+      }
+    }
+  } catch (err) {
+    if (err instanceof ApiError) throw err;
+  }
+
+  // Check duplicate locally
   const regs = read(KEY.regs, []);
   if (tel) {
     const dup = regs.find(r => r.phone === tel && r.status !== 'cancelled');
@@ -302,6 +464,10 @@ export async function registerGuest({
   write(KEY.regs, regs);
   audit('registration.create', { id: reg.id, source, staff, pax: partySize, autoCheckIn });
   emit();
+
+  // Sync to Firestore in cloud
+  syncRegistrationToCloud(reg);
+
   return publicView(reg);
 }
 
@@ -325,24 +491,87 @@ function publicView(r) {
 }
 
 export async function findByPhone(phone) {
-  await delay(300);
+  await delay(200);
   const tel = normalizePhone(phone);
-  const r = read(KEY.regs, []).find(x => x.phone === tel && x.status !== 'cancelled');
-  return r ? publicView(r) : null;
+  if (!tel) return null;
+
+  // 1. Check local cache
+  let r = read(KEY.regs, []).find(x => x.phone === tel && x.status !== 'cancelled');
+  if (r) return publicView(r);
+
+  // 2. Query Firestore if not found locally
+  try {
+    const fs = await getFirestoreModule();
+    if (fs?.db) {
+      const q = fs.query(fs.collection(fs.db, 'registrations'), fs.where('phone', '==', tel));
+      const snap = await fs.getDocs(q);
+      if (!snap.empty) {
+        const found = snap.docs.map(d => d.data()).find(d => d && d.status !== 'cancelled');
+        if (found) {
+          const regs = read(KEY.regs, []);
+          if (!regs.some(x => x.id === found.id)) {
+            regs.push(found);
+            write(KEY.regs, regs);
+            emit();
+          }
+          return publicView(found);
+        }
+      }
+    }
+  } catch (e) {}
+
+  return null;
 }
 
 export async function getByToken(token) {
   await delay(120);
-  const r = read(KEY.regs, []).find(x => x.token === token);
-  return r ? publicView(r) : null;
+  if (!token) return null;
+
+  let r = read(KEY.regs, []).find(x => x.token === token);
+  if (r) return publicView(r);
+
+  try {
+    const fs = await getFirestoreModule();
+    if (fs?.db) {
+      const q = fs.query(fs.collection(fs.db, 'registrations'), fs.where('token', '==', token));
+      const snap = await fs.getDocs(q);
+      if (!snap.empty) {
+        const found = snap.docs[0].data();
+        if (found) {
+          const regs = read(KEY.regs, []);
+          if (!regs.some(x => x.id === found.id)) {
+            regs.push(found);
+            write(KEY.regs, regs);
+            emit();
+          }
+          return publicView(found);
+        }
+      }
+    }
+  } catch (e) {}
+
+  return null;
 }
 
 /* ---------------- Check-in (Staff) ---------------- */
 /** @returns {{result:'ok'|'already'|'invalid'|'cancelled', registration?:object}} */
 export async function checkIn(token, staff = 'staff-demo') {
-  await delay(300);
+  await delay(200);
   const regs = read(KEY.regs, []);
-  const r = regs.find(x => x.token === token);
+  let r = regs.find(x => x.token === token);
+  if (!r) {
+    try {
+      const fs = await getFirestoreModule();
+      if (fs?.db) {
+        const q = fs.query(fs.collection(fs.db, 'registrations'), fs.where('token', '==', token));
+        const snap = await fs.getDocs(q);
+        if (!snap.empty) {
+          r = snap.docs[0].data();
+          regs.push(r);
+        }
+      }
+    } catch (e) {}
+  }
   if (!r) { audit('checkin.invalid', { staff }); return { result: 'invalid' }; }
   if (r.status === 'cancelled') return { result: 'cancelled', registration: publicView(r) };
   if (r.checkedInAt) { audit('checkin.duplicate', { id: r.id, staff }); return { result: 'already', registration: publicView(r) }; }
@@ -351,6 +580,7 @@ export async function checkIn(token, staff = 'staff-demo') {
   write(KEY.regs, regs);
   audit('checkin.success', { id: r.id, staff });
   emit();
+  updateRegistrationInCloud(r.id, { checkedInAt: r.checkedInAt, checkedInBy: r.checkedInBy });
   return { result: 'ok', registration: publicView(r) };
 }
 
@@ -370,6 +600,7 @@ export async function toggleCheckIn(id, staff = 'staff') {
   }
   write(KEY.regs, regs);
   emit();
+  updateRegistrationInCloud(r.id, { checkedInAt: r.checkedInAt, checkedInBy: r.checkedInBy });
   return publicView(r);
 }
 
@@ -379,11 +610,33 @@ export async function deleteRegistration(id, staff = 'staff') {
   write(KEY.regs, regs);
   audit('registration.delete', { id, staff });
   emit();
+  deleteRegistrationFromCloud(id);
   return true;
 }
 
 export async function listRegistrations() {
-  await delay(100);
+  await delay(80);
+  try {
+    const fs = await getFirestoreModule();
+    if (fs?.db) {
+      const snap = await fs.getDocs(fs.collection(fs.db, 'registrations'));
+      const cloudRegs = [];
+      snap.forEach(d => {
+        const data = d.data();
+        if (data && data.id) cloudRegs.push(data);
+      });
+      if (cloudRegs.length > 0) {
+        const localRegs = read(KEY.regs, []);
+        const map = new Map();
+        localRegs.forEach(r => { if (r.id) map.set(r.id, r); });
+        cloudRegs.forEach(r => { if (r.id) map.set(r.id, r); });
+        const merged = Array.from(map.values());
+        merged.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+        write(KEY.regs, merged);
+      }
+    }
+  } catch (e) {}
+
   return read(KEY.regs, [])
     .filter(r => r.status !== 'cancelled')
     .slice()
@@ -413,6 +666,9 @@ export function updateMyTicketGender(gender) {
   if (idx >= 0) {
     regs[idx].gender = g;
     write(KEY.regs, regs);
+    if (regs[idx].id) {
+      updateRegistrationInCloud(regs[idx].id, { gender: g });
+    }
   }
   emit();
   return g;
@@ -496,19 +752,39 @@ const readPrizes = () => {
 const readPlays = () => read(KEY.lsPlays, []);
 
 // Cloud sync helpers (Firebase Firestore with seamless localStorage fallback)
-let firestoreModule = null;
-async function getFirestoreModule() {
-  if (firestoreModule) return firestoreModule;
-  if (typeof window === 'undefined') return null;
+async function syncPlayToCloud(play) {
   try {
-    const fs = await import('firebase/firestore');
-    const fb = await import('./firebase.js');
-    if (fb.db) {
-      firestoreModule = { ...fs, db: fb.db };
-      return firestoreModule;
-    }
+    const fs = await getFirestoreModule();
+    if (!fs?.db || !play?.id) return;
+    await fs.setDoc(fs.doc(fs.db, 'luckyPlays', play.id), play, { merge: true });
   } catch (e) {}
-  return null;
+}
+
+async function initLuckyPlaysCloudSync() {
+  if (typeof window === 'undefined') return;
+  try {
+    const fs = await getFirestoreModule();
+    if (!fs || !fs.db) return;
+    fs.onSnapshot(fs.collection(fs.db, 'luckyPlays'), (snapshot) => {
+      const cloudPlays = [];
+      snapshot.forEach(docSnap => {
+        const d = docSnap.data();
+        if (d && d.id) cloudPlays.push(d);
+      });
+      if (cloudPlays.length > 0) {
+        const localPlays = read(KEY.lsPlays, []);
+        const map = new Map();
+        localPlays.forEach(p => { if (p.id) map.set(p.id, p); });
+        cloudPlays.forEach(p => { if (p.id) map.set(p.id, p); });
+        const merged = Array.from(map.values());
+        write(KEY.lsPlays, merged);
+        emit();
+      }
+    }, () => {});
+  } catch (e) {}
+}
+if (typeof window !== 'undefined') {
+  initLuckyPlaysCloudSync();
 }
 
 async function syncLuckyConfigToCloud(cfg) {
@@ -795,6 +1071,8 @@ export async function playLuckyStar(regToken) {
     write(KEY.lsPlays, plays);
     audit('lucky.play', { id: play.id, regId: reg.id, result: play.result, prizeId: play.prizeId });
     emit();
+    syncPlayToCloud(play);
+    if (reg.id) updateRegistrationInCloud(reg.id, { checkedInAt: reg.checkedInAt, checkedInBy: reg.checkedInBy });
     return { result: 'ok', play: playView(play, prizes) };
   });
 }
@@ -804,9 +1082,35 @@ export async function findClaim(codeOrQr) {
   await delay(120);
   const code = parseLuckyQr(codeOrQr);
   if (!code) return { result: 'invalid' };
-  const p = readPlays().find(x => x.claimCode === code);
+  let p = readPlays().find(x => x.claimCode === code);
+  if (!p) {
+    try {
+      const fs = await getFirestoreModule();
+      if (fs?.db) {
+        const q = fs.query(fs.collection(fs.db, 'luckyPlays'), fs.where('claimCode', '==', code));
+        const snap = await fs.getDocs(q);
+        if (!snap.empty) {
+          p = snap.docs[0].data();
+          const plays = readPlays();
+          if (!plays.some(x => x.id === p.id)) {
+            plays.push(p);
+            write(KEY.lsPlays, plays);
+          }
+        }
+      }
+    } catch (e) {}
+  }
   if (!p) return { result: 'invalid' };
-  const reg = read(KEY.regs, []).find(r => r.id === p.regId);
+  let reg = read(KEY.regs, []).find(r => r.id === p.regId);
+  if (!reg) {
+    try {
+      const fs = await getFirestoreModule();
+      if (fs?.db) {
+        const snap = await fs.getDoc(fs.doc(fs.db, 'registrations', p.regId));
+        if (snap.exists()) reg = snap.data();
+      }
+    } catch (e) {}
+  }
   return {
     result: p.redeemedAt ? 'already' : 'ok',
     play: playView(p, readPrizes()),
@@ -819,9 +1123,22 @@ export async function redeemPrize(codeOrQr, staff = 'staff') {
   await delay(200);
   const code = parseLuckyQr(codeOrQr);
   if (!code) return { result: 'invalid' };
-  return withLuckyLock(() => {
+  return withLuckyLock(async () => {
     const plays = readPlays();
-    const p = plays.find(x => x.claimCode === code);
+    let p = plays.find(x => x.claimCode === code);
+    if (!p) {
+      try {
+        const fs = await getFirestoreModule();
+        if (fs?.db) {
+          const q = fs.query(fs.collection(fs.db, 'luckyPlays'), fs.where('claimCode', '==', code));
+          const snap = await fs.getDocs(q);
+          if (!snap.empty) {
+            p = snap.docs[0].data();
+            plays.push(p);
+          }
+        }
+      } catch (e) {}
+    }
     if (!p) { audit('lucky.redeem.invalid', { staff }); return { result: 'invalid' }; }
     if (p.redeemedAt) {
       audit('lucky.redeem.duplicate', { staff, id: p.id });
@@ -832,6 +1149,12 @@ export async function redeemPrize(codeOrQr, staff = 'staff') {
     write(KEY.lsPlays, plays);
     audit('lucky.redeem', { staff, id: p.id, prizeId: p.prizeId });
     emit();
+    try {
+      const fs = await getFirestoreModule();
+      if (fs?.db) {
+        await fs.setDoc(fs.doc(fs.db, 'luckyPlays', p.id), { redeemedAt: p.redeemedAt, redeemedBy: p.redeemedBy }, { merge: true });
+      }
+    } catch (e) {}
     return { result: 'ok', play: playView(p, readPrizes()) };
   });
 }

@@ -194,6 +194,36 @@ export async function render(el) {
     return { chkW, pendW };
   }
 
+  function renderCloudBadge(cs) {
+    if (!cs || cs.state === 'connecting') {
+      return `<span class="badge" style="margin-left:8px;font-size:12px;background:rgba(255,255,255,0.7);"><span class="dot" style="background:#f59e0b;animation:pulse 1.2s infinite"></span> ☁️ กำลังเชื่อมคลาวด์...</span>`;
+    }
+    if (cs.state === 'connected') {
+      return `<span class="badge ok" style="margin-left:8px;font-size:12px;" title="เชื่อมต่อฐานข้อมูลคลาวด์ Firebase เรียลไทม์สำเร็จ"><span class="dot live"></span> ☁️ คลาวด์ซิงค์เรียลไทม์</span>`;
+    }
+    return `<span class="badge warn" style="margin-left:8px;font-size:12px;background:rgba(245,158,11,0.18);color:#b45309;font-weight:600;" title="${esc(cs.error || '')}">⚠️ โหมดออฟไลน์ (เฉพาะเครื่องนี้)</span>`;
+  }
+
+  function renderCloudAlert(cs) {
+    if (!cs || cs.state !== 'error') return '';
+    return `
+      <div class="card glass" style="margin-bottom:20px;border-left:4px solid #f59e0b;background:#fffaf0;padding:14px 18px;border-radius:16px;display:flex;align-items:flex-start;gap:14px">
+        <span style="font-size:26px;flex:none;line-height:1">📢</span>
+        <div style="font-size:13.5px;color:var(--cocoa);line-height:1.6;flex:1">
+          <strong style="color:#b45309;font-size:14.5px">คำแนะนำ: กำลังทำงานในโหมดออฟไลน์ (ข้อมูลจากโทรศัพท์ยังไม่ซิงค์มาเครื่องนี้)</strong><br />
+          สาเหตุ: ฐานข้อมูล <strong>Cloud Firestore</strong> ในโปรเจกต์ <code>nakkon-c0464</code> ยังไม่ได้กดสร้างใน Firebase Console หรือยังไม่ได้เปิด Rules<br />
+          <div style="margin-top:6px;padding:8px 12px;background:rgba(0,0,0,0.04);border-radius:8px;font-size:12.5px;color:var(--cocoa-2)">
+            👉 <strong>วิธีเปิดใช้งานให้ข้อมูลจากมือถือขึ้นทันที:</strong><br />
+            1. ไปที่ <a href="https://console.firebase.google.com/project/nakkon-c0464/firestore" target="_blank" style="color:var(--saffron-d);font-weight:600;text-decoration:underline">Firebase Console (คลิกที่นี่)</a><br />
+            2. ที่เมนู <strong>Build &gt; Firestore Database</strong> กดปุ่ม <strong>Create database</strong><br />
+            3. เลือก Location เป็น <code>asia-southeast1 (Singapore)</code> หรือ <code>asia-east1</code><br />
+            4. ที่แถบ <strong>Rules</strong> กำหนดเป็น <code>allow read, write: if true;</code> เพื่อเปิดให้ระบบอ่านและบันทึกข้อมูลได้
+          </div>
+        </div>
+      </div>
+    `;
+  }
+
   function renderDashboard() {
     const bw = getCheckinBarWidths(stats);
     const pctCheckin = stats.registered > 0 ? Math.round((stats.checkedIn / stats.registered) * 100) : 0;
@@ -203,7 +233,10 @@ export async function render(el) {
         <!-- Top Header Bar -->
         <div class="staff-topbar card glass">
           <div class="staff-topbar-left">
-            <span class="badge ok"><span class="dot live"></span> LIVE DASHBOARD</span>
+            <div style="display:flex;align-items:center;flex-wrap:wrap;gap:4px">
+              <span class="badge ok"><span class="dot live"></span> LIVE DASHBOARD</span>
+              <span id="staff-cloud-badge">${renderCloudBadge(stats.cloudSync)}</span>
+            </div>
             <h1 class="hand staff-main-title">แดชบอร์ดและรายชื่อผู้ลงทะเบียน</h1>
             <p class="staff-subtitle">
               ${icon('users')} ปฏิบัติงานโดย: <strong id="staff-current-name">${esc(session.staffName)}</strong>
@@ -229,6 +262,10 @@ export async function render(el) {
         <div id="panel-polaroid" ${activeTab === 'polaroid' ? '' : 'hidden'}></div>
         <div id="panel-lucky" ${activeTab === 'lucky' ? '' : 'hidden'}></div>
         <div id="panel-guests" ${activeTab === 'guests' ? '' : 'hidden'}>
+
+        <div id="staff-cloud-alert">
+          ${renderCloudAlert(stats.cloudSync)}
+        </div>
 
         <!-- LIVE DASHBOARD KPI CARDS -->
         <div class="staff-kpi-grid">
@@ -563,6 +600,11 @@ export async function render(el) {
     const fillPend = el.querySelector('#prog-fill-pending');
     if (fillChk) fillChk.style.width = `${bw.chkW}%`;
     if (fillPend) fillPend.style.width = `${bw.pendW}%`;
+
+    const badgeEl = el.querySelector('#staff-cloud-badge');
+    if (badgeEl) badgeEl.innerHTML = renderCloudBadge(s.cloudSync);
+    const alertEl = el.querySelector('#staff-cloud-alert');
+    if (alertEl) alertEl.innerHTML = renderCloudAlert(s.cloudSync);
   }
 
   /* =========================================================
