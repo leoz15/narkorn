@@ -302,6 +302,21 @@ async function deleteRegistrationFromCloud(id) {
   }
 }
 
+async function clearCloudCollection(collectionName) {
+  try {
+    const fs = await getFirestoreModule();
+    if (!fs?.db || !collectionName) return;
+    const snap = await fs.getDocs(fs.collection(fs.db, collectionName));
+    const deletes = [];
+    snap.forEach(d => {
+      deletes.push(fs.deleteDoc(d.ref));
+    });
+    await Promise.all(deletes);
+  } catch (e) {
+    console.warn(`Failed to clear cloud collection ${collectionName}:`, e);
+  }
+}
+
 let registrationsSyncInitialized = false;
 async function initRegistrationsCloudSync() {
   if (typeof window === 'undefined' || registrationsSyncInitialized) return;
@@ -328,24 +343,19 @@ async function initRegistrationsCloudSync() {
         if (d && d.id) cloudRegs.push(d);
       });
 
+      // Check if this device has offline-created items awaiting initial sync
       const localRegs = read(KEY.regs, []);
-      const map = new Map();
-
-      // Local entries first
-      localRegs.forEach(r => { if (r.id) map.set(r.id, r); });
-      // Overwrite with cloud entries (source of truth)
-      cloudRegs.forEach(r => { if (r.id) map.set(r.id, r); });
-
-      // If local has real registrations missing from cloud, push them up
-      localRegs.forEach(r => {
-        if (r.id && !r.demo && !cloudRegs.some(c => c.id === r.id)) {
-          syncRegistrationToCloud(r);
-        }
+      const pendingUploads = localRegs.filter(r => r && r.syncPending && !cloudRegs.some(c => c.id === r.id));
+      pendingUploads.forEach(r => {
+        const clean = { ...r };
+        delete clean.syncPending;
+        syncRegistrationToCloud(clean);
       });
 
-      const merged = Array.from(map.values());
-      merged.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
-      write(KEY.regs, merged);
+      // Cloud is the single source of truth: active list is cloud registrations + pending offline creations
+      const allRegs = [...cloudRegs, ...pendingUploads];
+      allRegs.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+      write(KEY.regs, allRegs);
       emit();
     }, (err) => {
       cloudSyncStatus.active = false;
@@ -460,13 +470,23 @@ export async function registerGuest({
     checkedInAt: autoCheckIn ? now : null,
     checkedInBy: autoCheckIn ? (staff || 'staff-onsite') : null,
   };
-  regs.push(reg);
+  regs.push({ ...reg, syncPending: true });
   write(KEY.regs, regs);
   audit('registration.create', { id: reg.id, source, staff, pax: partySize, autoCheckIn });
   emit();
 
   // Sync to Firestore in cloud
-  syncRegistrationToCloud(reg);
+  try {
+    await syncRegistrationToCloud(reg);
+    const cur = read(KEY.regs, []);
+    const idx = cur.findIndex(r => r.id === reg.id);
+    if (idx >= 0 && cur[idx].syncPending) {
+      delete cur[idx].syncPending;
+      write(KEY.regs, cur);
+    }
+  } catch (e) {
+    console.warn('Initial cloud sync queued for retry:', e);
+  }
 
   return publicView(reg);
 }
@@ -605,17 +625,27 @@ export async function toggleCheckIn(id, staff = 'staff') {
 }
 
 export async function deleteRegistration(id, staff = 'staff') {
-  await delay(150);
+  await delay(80);
+  // 1. Remove from local storage immediately
   const regs = read(KEY.regs, []).filter(x => x.id !== id);
   write(KEY.regs, regs);
+
+  // 2. Clear from device active ticket if this was the device's ticket
+  const myTicket = getMyTicketRef();
+  if (myTicket && myTicket.id === id) {
+    clearMyTicket();
+  }
+
   audit('registration.delete', { id, staff });
   emit();
-  deleteRegistrationFromCloud(id);
+
+  // 3. Delete from Firestore cloud and wait for completion
+  await deleteRegistrationFromCloud(id);
   return true;
 }
 
 export async function listRegistrations() {
-  await delay(80);
+  await delay(40);
   try {
     const fs = await getFirestoreModule();
     if (fs?.db) {
@@ -625,15 +655,17 @@ export async function listRegistrations() {
         const data = d.data();
         if (data && data.id) cloudRegs.push(data);
       });
-      if (cloudRegs.length > 0) {
-        const localRegs = read(KEY.regs, []);
-        const map = new Map();
-        localRegs.forEach(r => { if (r.id) map.set(r.id, r); });
-        cloudRegs.forEach(r => { if (r.id) map.set(r.id, r); });
-        const merged = Array.from(map.values());
-        merged.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
-        write(KEY.regs, merged);
-      }
+      // Cloud is single source of truth when connected
+      const localRegs = read(KEY.regs, []);
+      const pendingUploads = localRegs.filter(r => r && r.syncPending && !cloudRegs.some(c => c.id === r.id));
+      const allRegs = [...cloudRegs, ...pendingUploads];
+      allRegs.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+      write(KEY.regs, allRegs);
+      return allRegs
+        .filter(r => r.status !== 'cancelled')
+        .slice()
+        .reverse()
+        .map(r => publicView(r));
     }
   } catch (e) {}
 
@@ -771,15 +803,9 @@ async function initLuckyPlaysCloudSync() {
         const d = docSnap.data();
         if (d && d.id) cloudPlays.push(d);
       });
-      if (cloudPlays.length > 0) {
-        const localPlays = read(KEY.lsPlays, []);
-        const map = new Map();
-        localPlays.forEach(p => { if (p.id) map.set(p.id, p); });
-        cloudPlays.forEach(p => { if (p.id) map.set(p.id, p); });
-        const merged = Array.from(map.values());
-        write(KEY.lsPlays, merged);
-        emit();
-      }
+      cloudPlays.sort((a, b) => (a.playedAt || '').localeCompare(b.playedAt || ''));
+      write(KEY.lsPlays, cloudPlays);
+      emit();
     }, () => {});
   } catch (e) {}
 }
@@ -1188,6 +1214,9 @@ export async function getLuckyStats() {
 
 export async function resetLuckyPlays(staff = 'staff') {
   await delay(100);
+  try {
+    await clearCloudCollection('luckyPlays');
+  } catch (e) {}
   localStorage.removeItem(KEY.lsPlays);
   localStorage.removeItem(KEY.lsSeq);
   audit('lucky.reset', { staff });
@@ -1217,8 +1246,20 @@ export async function seedDemo(n = 40) {
   audit('demo.seed', { n });
   emit();
 }
-export async function resetAll() {
+export async function resetAll(staff = 'staff') {
+  // 1. Delete all Firestore cloud records
+  try {
+    await Promise.all([
+      clearCloudCollection('registrations'),
+      clearCloudCollection('luckyPlays'),
+    ]);
+  } catch (e) {
+    console.warn('Cloud collections clear warning:', e);
+  }
+
+  // 2. Clear all local storage keys
   Object.values(KEY).forEach(k => localStorage.removeItem(k));
   try { sessionStorage.removeItem('mf_session_counted'); } catch { }
+  audit('system.reset_all', { staff });
   emit();
 }

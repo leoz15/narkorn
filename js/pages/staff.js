@@ -673,8 +673,10 @@ export async function render(el) {
         const id = delBtn.dataset.delId;
         const name = delBtn.dataset.delName;
         if (!confirm(`ต้องการลบรายชื่อ "${name}" (${id}) ออกจากระบบใช่หรือไม่?`)) return;
+        delBtn.disabled = true;
+        delBtn.style.opacity = '0.5';
         await deleteRegistration(id, session.staffName);
-        toast(`ลบรายชื่อ "${name}" เรียบร้อย`, '');
+        toast(`ลบรายชื่อ "${name}" เรียบร้อย ✅`, 'ok');
         registrations = await listRegistrations();
         renderGuestTable();
       }
@@ -723,11 +725,14 @@ export async function render(el) {
 
     // Reset all data
     el.querySelector('#btn-reset-all')?.addEventListener('click', async () => {
-      if (!confirm('⚠️ ยืนยันการล้างข้อมูลผู้ลงทะเบียนทั้งหมดหรือไม่? (ไม่สามารถกู้คืนได้)')) return;
-      await resetAll();
+      if (!confirm('⚠️ ยืนยันการล้างข้อมูลผู้ลงทะเบียนทั้งหมดหรือไม่?\n(ระบบจะลบข้อมูลทั้งในเครื่องและบน Cloud Firestore ทั้งหมดอย่างถาวร)')) return;
+      const btn = el.querySelector('#btn-reset-all');
+      if (btn) { btn.disabled = true; btn.textContent = 'กำลังล้างข้อมูล...'; }
+      await resetAll(session.staffName);
       registrations = await listRegistrations();
       renderGuestTable();
-      toast('ล้างข้อมูลทั้งหมดเรียบร้อย', '');
+      toast('ล้างข้อมูลทั้งหมดทั้งในเครื่องและบนคลาวด์เรียบร้อย 🗑️', 'ok');
+      if (btn) { btn.disabled = false; btn.innerHTML = `${icon('trash')} ล้างข้อมูลทั้งหมด`; }
     });
   }
 
