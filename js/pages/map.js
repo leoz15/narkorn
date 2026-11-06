@@ -86,10 +86,18 @@ export async function render(el) {
 
     <div class="zone-sheet glass" id="zone-sheet" role="dialog" aria-live="polite"></div>
 
-    <div class="me-status glass" id="me-status" aria-live="polite">
-      <span class="me-status-ico" id="me-status-ico">👆</span>
-      <span class="me-status-text" id="me-status-text"></span>
-      <button class="me-status-btn" id="me-focus" title="เลื่อนกล้องไปที่ ME">📍 คลิ๊กเพื่อดู ME</button>
+    <div class="me-bar-wrap" id="me-bar-wrap">
+      <div class="me-quick-nav" id="me-quick-nav" role="toolbar" aria-label="ทางลัดกิจกรรม">
+        <button type="button" class="me-quick-btn" data-act="church">ไหว้พระ</button>
+        <button type="button" class="me-quick-btn" data-act="lucky">สอยดาว</button>
+        <button type="button" class="me-quick-btn" data-act="stage">เวที</button>
+        <button type="button" class="me-quick-btn" data-act="dining">โต๊ะอาหาร</button>
+      </div>
+      <div class="me-status glass" id="me-status" aria-live="polite">
+        <span class="me-status-ico" id="me-status-ico">👆</span>
+        <span class="me-status-text" id="me-status-text"></span>
+        <button class="me-status-btn" id="me-focus" title="เลื่อนกล้องไปที่ ME">📍 คลิ๊กเพื่อดู ME</button>
+      </div>
     </div>
 
     <div class="map-loading" id="map-loading"><div style="text-align:center;color:var(--cocoa-2)"><div class="spinner"></div>กำลังสร้างโลกจำลอง…</div></div>
@@ -354,7 +362,7 @@ export async function render(el) {
   // ---------- Zone 1.5: Lucky Star Bodhi Tree (ต้นโพธิ์สอยดาว) ----------
   const treeHits = [];
   const luckyTreeGroup = new THREE.Group();
-  luckyTreeGroup.position.set(-28.5, 0, 6.8);
+  luckyTreeGroup.position.set(-19.0, 0, 12.0);
   world.add(luckyTreeGroup);
 
   // 1. Base / Platform (ฐานแท่นหินทรงกลมธรรมชาติ & เนินหญ้า)
@@ -1055,7 +1063,7 @@ export async function render(el) {
     const x = (GCX - GW / 2 + 2) + Math.random() * (GW - 4);
     const z = -GD / 2 + 3 + Math.random() * (GD - 6);
     if (Math.abs(z - 8) < 2.5 || (x > -26 && x < -10 && z > -16 && z < 6) || (x > -7 && x < 12 && z > -14 && z < 7) || (Math.abs(x) < 3 && z > 8)) continue;
-    if (Math.hypot(x - (-28.5), z - 6.8) < 2.4) continue;
+    if (Math.hypot(x - (-19.0), z - 12.0) < 3.2) continue;
     bushSpots.push([x, z]);
     const b = add(new THREE.Mesh(new THREE.IcosahedronGeometry(0.5 + Math.random() * 0.3, 0), M(COL.leaf2))); b.position.set(x, 0.35, z);
     if (i % 2) { const fl = add(new THREE.Mesh(new THREE.SphereGeometry(0.14, 6, 4), M(['#f9a8c0', '#ffe28a', '#ffffff', '#f28b82'][i % 4])), world, false); fl.position.set(x + 0.3, 0.75, z + 0.2); }
@@ -1201,7 +1209,7 @@ export async function render(el) {
   const PAD = 0.24; // ME body radius
   nav.blockRect(-25.5, -10.5, -15.5, 3.5, PAD);                                   // temple platform, hall, columns, walls
   nav.blockCircle(-18, 2.6, 1.5, PAD);                                            // monk mascot pedestal
-  nav.blockCircle(-28.5, 6.8, 0.8, PAD);                                          // lucky star tree base
+  nav.blockCircle(-19.0, 12.0, 0.85, PAD);                                          // lucky star tree base
   nav.blockCircle(-9, 5.5, 0.12, PAD);                                            // flag pole
   nav.blockRect(-4.5, 8.5, -13.25, -6.75, PAD);                                   // stage deck + truss
   nav.blockRect(0.8, 3.2, -6.75, -5.4, PAD);                                      // stage stairs
@@ -1227,6 +1235,16 @@ export async function render(el) {
     statusIco.textContent = ico; statusText.innerHTML = txt;
     pageEl.dataset.meState = s;
     const box = el.querySelector('#me-status'); box.classList.remove('pop'); void box.offsetWidth; box.classList.add('pop');
+    const actMap = {
+      [ME_STATE.WALKING_TO_CHURCH]: 'church', [ME_STATE.PRAYING]: 'church',
+      [ME_STATE.WALKING_TO_LUCKY]: 'lucky', [ME_STATE.LUCKY_DRAWING]: 'lucky',
+      [ME_STATE.WALKING_TO_STAGE]: 'stage', [ME_STATE.DANCING]: 'stage',
+      [ME_STATE.WALKING_TO_DINING]: 'dining', [ME_STATE.EATING]: 'dining',
+    };
+    const curAct = actMap[s] || null;
+    el.querySelectorAll('#me-quick-nav .me-quick-btn').forEach(b => {
+      b.classList.toggle('active', b.dataset.act === curAct);
+    });
     if (s === ME_STATE.PRAYING || s === ME_STATE.DANCING || s === ME_STATE.EATING || s === ME_STATE.LUCKY_DRAWING) {
       triggerActivityCloseUp(me.kind);
     }
@@ -1245,7 +1263,7 @@ export async function render(el) {
   const SPOTS = {
     church: { kind: 'church', key: 'church', x: -18, z: 5.3, face: Math.PI },               // in front of the monk / temple steps
     stage: { kind: 'stage', key: 'stage', x: -0.8, z: -5.2, face: Math.atan2(2.8, -4.8) },  // dance floor in front of the stage (not on it)
-    lucky: { kind: 'lucky', key: 'lucky_tree', x: -28.5, z: 8.2, face: Math.PI },           // in front of Lucky Star Tree
+    lucky: { kind: 'lucky', key: 'lucky_tree', x: -19.0, z: 13.4, face: Math.PI },           // in front of Lucky Star Tree (across from the monk)
   };
 
   offLucky = mountLuckyStar(el.querySelector('#ls-host'), el.querySelector('#map-page'), {
@@ -1262,7 +1280,7 @@ export async function render(el) {
         await walkPromise;
       }
       // Camera Zoom in close-up framing ME and tree & lock controls during event
-      flyTo([-28.5, 1.45, 7.65], isMobile ? 3.6 : 3.1);
+      flyTo([-19.0, 1.45, 12.85], isMobile ? 3.6 : 3.1);
       controls.enabled = false;
       await new Promise(r => setTimeout(r, 850)); // smooth camera ease-in
     },
@@ -1271,7 +1289,7 @@ export async function render(el) {
     },
     onCloseModal: () => {
       controls.enabled = true; // Unlock controls
-      flyTo([-28.5, 0.6, 8.2], isMobile ? 1.55 : 1.35); // Zoom out smoothly
+      flyTo([-19.0, 0.6, 13.4], isMobile ? 1.55 : 1.35); // Zoom out smoothly
       luckyTree.resetHarvestState?.();
       if (me) {
         me.resetToIdle();
@@ -1488,6 +1506,23 @@ export async function render(el) {
       }
     }
   }
+
+  // Quick Activity Navigation Buttons (ไหว้พระ · สอยดาว · เวที · โต๊ะอาหาร)
+  el.querySelector('#me-quick-nav')?.addEventListener('click', (e) => {
+    const btn = e.target.closest('[data-act]');
+    if (!btn) return;
+    closeZone();
+    const act = btn.dataset.act;
+    if (act === 'church') {
+      commandSpot(SPOTS.church);
+    } else if (act === 'lucky') {
+      offLucky?.triggerAction?.();
+    } else if (act === 'stage') {
+      commandSpot(SPOTS.stage);
+    } else if (act === 'dining') {
+      commandDining(0, new THREE.Vector3(tableSpots[0][0], 0, tableSpots[0][1]));
+    }
+  });
 
   // Click "📍 คลิ๊กเพื่อดู ME": Zoom in to close-up focus on ME (or toggle overview if already zoomed in close)
   el.querySelector('#me-focus').addEventListener('click', () => {

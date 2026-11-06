@@ -1,4 +1,5 @@
 import { toast, footer, icon } from '../ui.js';
+import { isPolaroidOpen } from '../store.js';
 
 /* ------------------------------------------------------------------
  * Config
@@ -83,7 +84,37 @@ export const DHAMMA_QUOTES = [
 /* ------------------------------------------------------------------
  * Page
  * ------------------------------------------------------------------ */
+function renderComingSoon(el) {
+  el.innerHTML = `
+    <section class="page container pol-page">
+      <div class="card glass soon-hero" style="max-width:540px;margin:28px auto;text-align:center;padding:48px 24px;border-radius:28px;">
+        <div style="font-size:68px;margin-bottom:12px;filter:drop-shadow(0 6px 12px rgba(210,122,22,0.22));">📸</div>
+        <span class="eyebrow" style="color:var(--saffron-d);font-weight:700;letter-spacing:0.06em;">DIGITAL POLAROID</span>
+        <h1 class="hand" style="font-size:32px;color:var(--cocoa);margin:8px 0 14px;">ภาพที่ระลึกกับพระ</h1>
+        
+        <div style="display:inline-flex;align-items:center;gap:6px;padding:6px 16px;border-radius:999px;background:#fff3dc;color:#c27803;border:1px solid #fbd888;font-size:13px;font-weight:600;margin-bottom:20px;">
+          <span>⏳</span> เปิดให้ร่วมถ่ายภาพในวันงาน (22 พฤศจิกายน 2569)
+        </div>
+
+        <p style="color:var(--cocoa-2);line-height:1.7;margin:0 auto 28px;max-width:420px;font-size:14.5px;">
+          ระบบถ่ายภาพ Digital Polaroid ที่ระลึกร่วมกับพระนวกะ พร้อมคำคมคติธรรมมงคล จะเปิดให้ทุกท่านร่วมบันทึกภาพความประทับใจในวันงานบวช
+        </p>
+
+        <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">
+          <a href="#/schedule" class="btn btn-primary">🗓️ ดูกำหนดการงานบวช</a>
+          <a href="#/map" class="btn">🗺️ ดูแผนที่งาน 3D</a>
+        </div>
+      </div>
+    </section>
+    ${footer()}
+  `;
+}
+
 export async function render(el) {
+  if (!isPolaroidOpen()) {
+    renderComingSoon(el);
+    return;
+  }
   let userPhoto = null;      // object URL / data URL ของรูปผู้ใช้
   let resultUrl = null;      // data URL ของภาพโพลารอยด์ที่สร้างแล้ว
   let lastQuoteIdx = -1;

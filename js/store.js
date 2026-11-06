@@ -139,6 +139,7 @@ const KEY = {
   lsPlays: 'mf.lucky.plays.v1',
   lsConfig: 'mf.lucky.config.v1',
   lsSeq: 'mf.lucky.seq.v1',
+  polaroidConfig: 'mf.polaroid.config.v1',
 };
 
 const DEFAULT_QUOTES = [
@@ -222,7 +223,7 @@ function emit() {
 channel && (channel.onmessage = () => { const s = computeStats(); listeners.forEach(fn => fn(s)); });
 if (typeof window !== 'undefined') {
   window.addEventListener('storage', e => {
-    if (e.key === KEY.regs || e.key === KEY.visitors || e.key === KEY.lsPlays || e.key === KEY.lsPrizes || e.key === KEY.lsConfig) {
+    if (e.key === KEY.regs || e.key === KEY.visitors || e.key === KEY.lsPlays || e.key === KEY.lsPrizes || e.key === KEY.lsConfig || e.key === KEY.polaroidConfig) {
       const s = computeStats();
       listeners.forEach(fn => fn(s));
     }
@@ -552,6 +553,78 @@ export async function saveLuckyConfig(patch, staff = 'staff') {
   syncLuckyConfigToCloud(cfg);
   return cfg;
 }
+
+/* ---------------- Polaroid Config (Open/Closed switch) ---------------- */
+const DEFAULT_POLAROID_CONFIG = {
+  enabled: false,           // ปิดไว้ก่อนตามที่ต้องการ (ถึงวันงานค่อยเปิด หรือเปิดผ่านสวิตช์หลังบ้าน)
+  autoOpenOnEventDay: true, // เปิดอัตโนมัติตั้งแต่วันงาน 22 พ.ย. 2569 เป็นต้นไป
+};
+
+async function syncPolaroidConfigToCloud(cfg) {
+  try {
+    const fs = await getFirestoreModule();
+    if (!fs || !fs.db) return;
+    await fs.setDoc(fs.doc(fs.db, 'settings', 'polaroidConfig'), cfg, { merge: true });
+  } catch (e) {}
+}
+
+async function initPolaroidCloudSync() {
+  if (typeof window === 'undefined') return;
+  try {
+    const fs = await getFirestoreModule();
+    if (!fs || !fs.db) return;
+    fs.onSnapshot(fs.doc(fs.db, 'settings', 'polaroidConfig'), snap => {
+      if (snap.exists()) {
+        const remote = snap.data();
+        const current = read(KEY.polaroidConfig, {});
+        if (remote && JSON.stringify(remote) !== JSON.stringify(current)) {
+          write(KEY.polaroidConfig, { ...DEFAULT_POLAROID_CONFIG, ...remote });
+          emit();
+        }
+      }
+    }, () => {});
+  } catch (e) {}
+}
+if (typeof window !== 'undefined') {
+  initPolaroidCloudSync();
+}
+
+export function getPolaroidConfig() {
+  const local = read(KEY.polaroidConfig, null);
+  // Auto-detect ?polaroid=1 or ?openPolaroid=true in URL
+  if (typeof window !== 'undefined') {
+    try {
+      const sp = new URLSearchParams(window.location.search);
+      if (sp.get('polaroid') === '1' || sp.get('openPolaroid') === 'true') {
+        return { ...DEFAULT_POLAROID_CONFIG, ...(local || {}), enabled: true };
+      }
+    } catch (e) {}
+  }
+  return { ...DEFAULT_POLAROID_CONFIG, ...(local || {}) };
+}
+
+export async function savePolaroidConfig(patch, staff = 'staff') {
+  await delay(80);
+  const cfg = { ...getPolaroidConfig(), ...patch };
+  cfg.enabled = !!cfg.enabled;
+  cfg.autoOpenOnEventDay = cfg.autoOpenOnEventDay !== false;
+  write(KEY.polaroidConfig, cfg);
+  audit('polaroid.config', { staff, ...cfg });
+  emit();
+  syncPolaroidConfigToCloud(cfg);
+  return cfg;
+}
+
+export function isPolaroidOpen() {
+  const cfg = getPolaroidConfig();
+  if (cfg.enabled) return true;
+  if (cfg.autoOpenOnEventDay) {
+    const today = bangkokDate();
+    if (today >= EVENT.luckyStarDate) return true;
+  }
+  return false;
+}
+
 
 /** Current Thai (Asia/Bangkok) calendar date as YYYY-MM-DD. */
 export function bangkokDate(d = new Date()) {

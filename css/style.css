@@ -476,16 +476,56 @@ body[data-route="map"] {
 .zs-timeline .tp.now i { box-shadow: 0 0 0 5px rgba(127,163,107,.25); }
 .zs-timeline .tp:not(:last-child)::after { content: ""; position: absolute; top: 7px; left: 50%; width: 100%; height: 3px; background: var(--cream-2); }
 .zs-timeline .tp.done:not(:last-child)::after { background: var(--leaf); }
-.me-status {
+.me-bar-wrap {
   position: absolute; left: 50%; bottom: 24px; transform: translateX(-50%); z-index: 5;
+  display: flex; flex-direction: column; align-items: center; gap: 8px;
+  pointer-events: none;
+  transition: opacity .3s, transform .25s var(--ease);
+}
+.me-bar-wrap > * { pointer-events: auto; }
+.zone-sheet.open ~ .me-bar-wrap { opacity: 0; pointer-events: none; }
+
+.me-quick-nav {
+  display: flex; align-items: center; justify-content: center; gap: 8px;
+  max-width: calc(100vw - 20px);
+}
+.me-quick-btn {
+  border: 1px solid rgba(74, 52, 40, 0.12);
+  background: rgba(255, 250, 242, 0.94);
+  backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
+  box-shadow: 0 4px 12px rgba(74, 52, 40, 0.08);
+  color: var(--cocoa);
+  font: inherit; font-size: 13.5px; font-weight: 600;
+  padding: 7px 16px; border-radius: 999px;
+  cursor: pointer; white-space: nowrap;
+  transition: transform .15s var(--ease), background .2s, box-shadow .2s, color .2s, border-color .2s;
+  user-select: none; -webkit-user-select: none;
+}
+.me-quick-btn:hover {
+  transform: translateY(-2px);
+  background: #fff;
+  box-shadow: 0 6px 16px rgba(74, 52, 40, 0.12);
+  color: var(--saffron-d);
+}
+.me-quick-btn:active {
+  transform: scale(0.95);
+}
+.me-quick-btn.active {
+  background: linear-gradient(180deg, #fff2db, #ffe5be);
+  border-color: rgba(245, 166, 35, 0.6);
+  color: var(--saffron-d);
+  box-shadow: 0 4px 12px rgba(210, 122, 22, 0.2);
+}
+
+.me-status {
+  position: relative; left: auto; bottom: auto; transform: none; z-index: 1;
   display: flex; align-items: center; gap: 10px; padding: 9px 18px; border-radius: 999px;
   background: rgba(255, 250, 242, 0.94); backdrop-filter: blur(12px); -webkit-backdrop-filter: blur(12px);
   border: 1px solid var(--line); box-shadow: var(--shadow-md); font-size: 14px; color: var(--cocoa);
   transition: opacity .3s, transform .25s var(--ease); pointer-events: auto;
 }
-.zone-sheet.open ~ .me-status { opacity: 0; pointer-events: none; }
 .me-status.pop { animation: mePop .3s ease-out; }
-@keyframes mePop { 0% { transform: translateX(-50%) scale(0.96); } 50% { transform: translateX(-50%) scale(1.03); } 100% { transform: translateX(-50%) scale(1); } }
+@keyframes mePop { 0% { transform: scale(0.96); } 50% { transform: scale(1.03); } 100% { transform: scale(1); } }
 .me-status-ico { font-size: 18px; flex: none; }
 .me-status-text { white-space: nowrap; line-height: 1.3; }
 .me-status-btn {
@@ -1662,12 +1702,24 @@ body[data-route="map"] {
   .map-controls button { width: 36px; height: 36px; font-size: 15px; }
   .map-label { padding: 6px 14px; font-size: 16px; }
   .zone-sheet {
-    bottom: calc(76px + env(safe-area-inset-bottom));
+    bottom: calc(92px + env(safe-area-inset-bottom));
     left: 10px; right: 10px;
     margin: 0 auto;
   }
+  .me-bar-wrap {
+    bottom: calc(92px + env(safe-area-inset-bottom));
+    gap: 6px;
+    max-width: calc(100vw - 16px);
+  }
+  .me-quick-nav {
+    gap: 6px;
+  }
+  .me-quick-btn {
+    padding: 6px 13px;
+    font-size: 12.5px;
+  }
   .me-status {
-    bottom: calc(76px + env(safe-area-inset-bottom)); max-width: calc(100vw - 20px);
+    bottom: auto; max-width: calc(100vw - 20px);
     padding: 7px 14px; gap: 8px; font-size: 13px;
   }
   .me-status-ico { font-size: 17px; }

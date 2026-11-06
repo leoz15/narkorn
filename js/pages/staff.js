@@ -1,6 +1,7 @@
 import {
   EVENT, listRegistrations, getStats, onStats,
-  toggleCheckIn, deleteRegistration, seedDemo, resetAll
+  toggleCheckIn, deleteRegistration, seedDemo, resetAll,
+  getPolaroidConfig, savePolaroidConfig, isPolaroidOpen
 } from '../store.js';
 import { esc, toast, fmtTime, countUp, footer, icon } from '../ui.js';
 import { renderLuckyAdmin } from './staff-lucky.js';
@@ -220,8 +221,12 @@ export async function render(el) {
         <div class="staff-tabs" id="staff-tabs" role="tablist">
           <button type="button" class="staff-tab ${activeTab === 'guests' ? 'active' : ''}" data-tab="guests" role="tab">${icon('users')} ผู้ลงทะเบียน</button>
           <button type="button" class="staff-tab ${activeTab === 'lucky' ? 'active' : ''}" data-tab="lucky" role="tab">⭐ Lucky Star · สอยดาว</button>
+          <button type="button" class="staff-tab ${activeTab === 'polaroid' ? 'active' : ''}" data-tab="polaroid" role="tab">
+            📸 Polaroid · ภาพที่ระลึก <span class="badge ${isPolaroidOpen() ? 'ok' : ''}" id="tab-pol-badge" style="font-size:10.5px;padding:1px 7px;margin-left:6px;">${isPolaroidOpen() ? 'เปิด' : 'ปิด'}</span>
+          </button>
         </div>
 
+        <div id="panel-polaroid" ${activeTab === 'polaroid' ? '' : 'hidden'}></div>
         <div id="panel-lucky" ${activeTab === 'lucky' ? '' : 'hidden'}></div>
         <div id="panel-guests" ${activeTab === 'guests' ? '' : 'hidden'}>
 
@@ -350,6 +355,90 @@ export async function render(el) {
     bindDashboardEvents();
     renderGuestTable();
     if (activeTab === 'lucky') mountLucky();
+    if (activeTab === 'polaroid') renderPolaroidPanel();
+  }
+
+  function renderPolaroidPanel() {
+    const wrap = el.querySelector('#panel-polaroid');
+    if (!wrap) return;
+    const cfg = getPolaroidConfig();
+    const isOpen = isPolaroidOpen();
+
+    wrap.innerHTML = `
+      <div class="card glass" style="max-width:820px;margin:0 auto 24px;border-radius:24px;padding:28px;">
+        <div style="display:flex;align-items:center;gap:16px;flex-wrap:wrap;justify-content:space-between;border-bottom:1px solid var(--line);padding-bottom:20px;margin-bottom:22px;">
+          <div style="display:flex;align-items:center;gap:14px;">
+            <div style="font-size:40px;background:linear-gradient(180deg,#fff6d8,#ffe7a8);width:62px;height:62px;display:grid;place-items:center;border-radius:18px;flex:none;box-shadow:var(--shadow-sm);">📸</div>
+            <div>
+              <h2 style="margin:0;font-size:22px;color:var(--cocoa);">ระบบ Digital Polaroid</h2>
+              <p style="margin:4px 0 0;font-size:13.5px;color:var(--cocoa-2);">ควบคุมการเปิด-ปิดหน้าถ่ายภาพที่ระลึกกับพระนวกะ</p>
+            </div>
+          </div>
+          <div>
+            <span class="badge ${isOpen ? 'ok' : 'wait'}" id="pol-live-badge" style="font-size:13px;padding:6px 14px;border-radius:99px;">
+              ${isOpen ? '🟢 สถานะ: เปิดใช้งานอยู่' : '🔒 สถานะ: ปิดไว้ก่อน (แสดงหน้าเร็วๆ นี้)'}
+            </span>
+          </div>
+        </div>
+
+        <div style="display:grid;gap:20px;">
+          <div style="background:#fffaf0;border:1.5px solid rgba(245,166,35,0.35);border-radius:18px;padding:20px;">
+            <label class="lsa-switch" style="cursor:pointer;">
+              <input type="checkbox" id="pol-toggle-switch" ${cfg.enabled ? 'checked' : ''} />
+              <span class="lsa-switch-ui"></span>
+              <span style="font-size:15px;">
+                <b id="pol-switch-text">${cfg.enabled ? 'เปิดใช้งานหน้า Polaroid ทันที (สวิตช์เปิด)' : 'ปิดไว้ก่อน (สวิตช์ปิด)'}</b>
+                <small style="margin-top:4px;color:var(--cocoa-2);display:block;line-height:1.5;">
+                  ${cfg.enabled ? 'ผู้ใช้งานทุกคนสามารถกดเข้าเมนู Polaroid เพื่อถ่ายภาพหรืออัปโหลดภาพได้ทันที' : 'ผู้ใช้งานที่กดเข้าเมนู Polaroid จะเห็นการ์ดแจ้งว่า "เปิดให้ร่วมถ่ายภาพในวันงาน (22 พฤศจิกายน 2569)"'}
+                </small>
+              </span>
+            </label>
+          </div>
+
+          <div style="background:rgba(255,255,255,0.6);border:1px solid var(--line);border-radius:16px;padding:16px 18px;display:flex;flex-direction:column;gap:8px;">
+            <label style="display:flex;align-items:center;gap:10px;cursor:pointer;font-size:13.5px;color:var(--cocoa);">
+              <input type="checkbox" id="pol-auto-open-opt" ${cfg.autoOpenOnEventDay ? 'checked' : ''} style="width:18px;height:18px;accent-color:var(--saffron-d);" />
+              <span><b>เปิดอัตโนมัติในวันงาน</b> (เปิดระบบอัตโนมัติตั้งแต่ 22 พฤศจิกายน 2569 เป็นต้นไป แม้สวิตช์หลักจะปิดอยู่)</span>
+            </label>
+          </div>
+
+          <div style="display:flex;gap:12px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:18px;align-items:center;">
+            <a href="#/polaroid" target="_blank" class="btn btn-sm btn-primary">👁️ เปิดดูหน้า Polaroid ผู้ใช้งาน</a>
+            <button type="button" class="btn btn-sm" id="pol-copy-test-link">📋 คัดลอกลิงก์ทดสอบสำหรับเปิดในมือถือ</button>
+          </div>
+        </div>
+      </div>
+    `;
+
+    const sw = wrap.querySelector('#pol-toggle-switch');
+    sw?.addEventListener('change', async (e) => {
+      const isChecked = e.target.checked;
+      await savePolaroidConfig({ enabled: isChecked }, session.staffName);
+      toast(isChecked ? '🟢 เปิดใช้งานหน้า Polaroid เรียบร้อยแล้ว' : '🔒 ปิดหน้า Polaroid เรียบร้อยแล้ว', isChecked ? 'ok' : '');
+      renderPolaroidPanel();
+      const badge = el.querySelector('#tab-pol-badge');
+      if (badge) {
+        const opened = isPolaroidOpen();
+        badge.className = `badge ${opened ? 'ok' : ''}`;
+        badge.textContent = opened ? 'เปิด' : 'ปิด';
+      }
+    });
+
+    wrap.querySelector('#pol-auto-open-opt')?.addEventListener('change', async (e) => {
+      await savePolaroidConfig({ autoOpenOnEventDay: e.target.checked }, session.staffName);
+      toast('บันทึกการตั้งค่าเปิดอัตโนมัติวันงานแล้ว', 'ok');
+      renderPolaroidPanel();
+    });
+
+    wrap.querySelector('#pol-copy-test-link')?.addEventListener('click', async () => {
+      const testUrl = `${location.origin}${location.pathname}?polaroid=1#/polaroid`;
+      try {
+        await navigator.clipboard.writeText(testUrl);
+        toast('คัดลอกลิงก์ทดสอบ Polaroid แล้ว เปิดในมือถือได้ทันที', 'ok');
+      } catch {
+        prompt('คัดลอกลิงก์ทดสอบนี้ไปเปิดในมือถือ:', testUrl);
+      }
+    });
   }
 
   function mountLucky() {
@@ -488,7 +577,9 @@ export async function render(el) {
       el.querySelectorAll('#staff-tabs .staff-tab').forEach(b => b.classList.toggle('active', b === tab));
       el.querySelector('#panel-guests').hidden = activeTab !== 'guests';
       el.querySelector('#panel-lucky').hidden = activeTab !== 'lucky';
+      el.querySelector('#panel-polaroid').hidden = activeTab !== 'polaroid';
       if (activeTab === 'lucky') { mountLucky(); lucky?.refresh(); }
+      if (activeTab === 'polaroid') { renderPolaroidPanel(); }
     });
 
     // Logout
