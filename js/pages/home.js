@@ -4,7 +4,7 @@ import { countUp, footer } from '../ui.js';
 const FEATURES = [
   { ico: '🎫', bg: '#fde7cf', title: 'บัตรผู้ร่วมงาน (E-Badge)', text: 'ลงทะเบียนรับบัตรประจำตัว พร้อมสิทธิ์ร่วมกิจกรรมพิเศษภายในงาน', href: '#/checkin', status: 'ok', label: 'พร้อมใช้งาน' },
   { ico: '🗺️', bg: '#e3efd9', title: '3D Event Map', text: 'สำรวจโบสถ์ เวทีดนตรี และซุ้มอาหาร ในโลกจำลองแบบ Isometric', href: '#/map', status: 'ok', label: 'พร้อมใช้งาน' },
-  { ico: '📸', bg: '#f9dcda', title: 'Digital Polaroid', text: 'ถ่ายรูปคู่กับภาพพระนวกะ พร้อมคำอวยพร แล้วบันทึกเก็บไว้เป็นความทรงจำ', href: '#/polaroid', status: 'ok', label: 'พร้อมใช้งาน' },
+  { ico: '📸', bg: '#f9dcda', title: 'Digital Polaroid', text: 'ถ่ายรูปคู่กับภาพพระ พร้อมคำอวยพร แล้วบันทึกเก็บไว้เป็นความทรงจำ', href: '#/polaroid', status: 'ok', label: 'พร้อมใช้งาน' },
   { ico: '🗓️', bg: '#fef0d8', title: 'กำหนดการพิธีบวช', text: 'กำหนดการพิธีปลงผม เลี้ยงพระ เทศน์สอนนาค แห่นาค และพิธีอุปสมบท 22 พ.ย. 2569', href: '#/schedule', status: 'ok', label: 'พร้อมดูแล้ว' },
   { ico: '🎁', bg: '#fbf0d0', title: 'รับของที่ระลึก', text: 'ผู้ที่เช็กอินแล้วรับ Gift QR สิทธิ์ 1 ครั้งต่อคน', href: '#/gift', status: 'soon', label: 'เร็ว ๆ นี้' },
 ];
@@ -17,7 +17,7 @@ export async function render(el) {
         <span class="eyebrow">☸ งานบุญ + Music Festival</span>
         <h1 id="hero-title">งานบวช <span class="amp">&</span> ดนตรี</h1>
         <div class="sub">MERIT FEST · ${EVENT.tagline}</div>
-        <p class="lead">ร่วมเป็นส่วนหนึ่งของวันสำคัญ ลงทะเบียนล่วงหน้า สำรวจบรรยากาศงานผ่านแผนที่ 3D และเก็บความทรงจำด้วยภาพ Polaroid กับพระนวกะ</p>
+        <p class="lead">ร่วมเป็นส่วนหนึ่งของวันสำคัญ ลงทะเบียนล่วงหน้า<br class="show-mobile" />สำรวจบรรยากาศงานผ่านแผนที่ 3D<br class="show-mobile" />และเก็บความทรงจำด้วยภาพ Polaroid กับพระ</p>
         <div class="hero-cta">
           <a href="#/checkin" class="btn btn-primary btn-lg" id="hero-register">🎫 ลงทะเบียนรับบัตร</a>
           <a href="#/map" class="btn btn-lg" id="hero-map">🗺️ ดูแผนที่ 3D</a>
@@ -27,7 +27,7 @@ export async function render(el) {
         </div>
         <div class="hero-meta">
           <div>📅 ${EVENT.dateTh}</div>
-          <div>📍 ${EVENT.venue}</div>
+          <div>📍 พัทธสีมา วัดลานคา<br class="show-mobile" />ต.บางปลาม้า อ.บางปลาม้า จ.สุพรรณบุรี</div>
         </div>
       </div>
       <div class="hero-art">
@@ -49,7 +49,7 @@ export async function render(el) {
       <div class="section-head">
         <span class="eyebrow">Experience</span>
         <h2>ทุกอย่างของงาน ในแพลตฟอร์มเดียว</h2>
-        <p style="color:var(--cocoa-2)">ตั้งแต่ลงทะเบียน เช็กอิน จนถึงเก็บภาพความทรงจำ</p>
+        <p style="color:var(--cocoa-2)">ตั้งแต่ลงทะเบียน เช็กอิน<br class="show-mobile" />จนถึงเก็บภาพความทรงจำ</p>
       </div>
       <div class="grid grid-3">
         ${FEATURES.map((f, i) => `

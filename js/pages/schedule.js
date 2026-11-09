@@ -103,7 +103,7 @@ export async function render(el) {
           <div class="invitation-card-foot">
             <div>
               <strong>การ์ดเชิญฉบับสมบูรณ์</strong>
-              <p>สามารถแตะขยาย หรือบันทึกภาพเก็บไว้เป็นที่ระลึก</p>
+              <p class="text-balance">สามารถแตะขยาย หรือบันทึกภาพเก็บไว้เป็นที่ระลึก</p>
             </div>
             <div class="invitation-btn-group">
               <button class="btn btn-sm btn-primary" id="btn-zoom-card">ขยายดูภาพ</button>
@@ -118,7 +118,7 @@ export async function render(el) {
         <div class="section-head">
           <span class="eyebrow">Agenda</span>
           <h2>กำหนดการและลำดับพิธีการ</h2>
-          <p style="color:var(--cocoa-2)">วันอาทิตย์ที่ 22 พฤศจิกายน 2569 ณ พัทธสีมา วัดลานคา</p>
+          <p style="color:var(--cocoa-2)">วันอาทิตย์ที่ 22 พฤศจิกายน 2569<br class="show-mobile" /> ณ พัทธสีมา วัดลานคา</p>
 
           <!-- Filter Tabs -->
           <div class="sched-filter-tabs">
@@ -201,7 +201,7 @@ export async function render(el) {
           <div class="card info-card">
             <div class="info-ico">🚗</div>
             <h3>การเดินทาง & ที่จอดรถ</h3>
-            <p>วัดลานคา อ.บางปลาม้า จ.สุพรรณบุรี มีลานจอดรถกว้างขวางรองรับรถยนต์ได้จำนวนมาก พร้อมเจ้าหน้าที่คอยแนะนำ</p>
+            <p>วัดลานคา อ.บางปลาม้า จ.สุพรรณบุรี<br class="show-mobile" />มีลานจอดรถกว้างขวางรองรับได้จำนวนมาก พร้อมเจ้าหน้าที่คอยแนะนำ</p>
             <a href="${EVENT.googleMapsUrl}" target="_blank" rel="noopener" style="color:var(--saffron-d);font-weight:600;font-size:14px;">เปิด Google Maps นำทาง →</a>
           </div>
 

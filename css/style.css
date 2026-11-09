@@ -1715,6 +1715,13 @@ body[data-route="map"] {
 /* ---------- Tabbar (mobile) ---------- */
 .tabbar { display: none; }
 
+/* Responsive Line Breaks & Text Balance Helpers */
+.show-mobile { display: none !important; }
+.show-mobile-block { display: none !important; }
+.hide-mobile { display: inline !important; }
+.text-balance { text-wrap: balance; }
+.nowrap { white-space: nowrap; }
+
 /* ---------- Responsive ---------- */
 @media (max-width: 960px) {
   .hero, .reg-wrap, .pol-wrap, .sched-card-grid { grid-template-columns: 1fr; }
@@ -1722,6 +1729,10 @@ body[data-route="map"] {
   .hero-art { order: -1; }
 }
 @media (max-width: 760px) {
+  .show-mobile { display: inline !important; }
+  .show-mobile-block { display: block !important; }
+  .hide-mobile { display: none !important; }
+  .section-head p, .hero p, .checkin-head p, .sched-hero p { text-wrap: balance; }
   :root { --topbar-h: 60px; }
   .topbar { justify-content: center; }
   .nav, .ticket-btn { display: none; }

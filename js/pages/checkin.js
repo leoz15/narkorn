@@ -27,7 +27,7 @@ export async function render(el, params = {}) {
         <div class="checkin-head" style="text-align:center;max-width:600px;margin:0 auto 28px">
           <h1 style="font-family:var(--hand);font-size:clamp(34px, 5vw, 48px);margin:6px 0 10px">บัตรผู้ร่วมงาน</h1>
           <p style="color:var(--cocoa-2);font-size:15px;margin:0">
-            ยินดีต้อนรับสู่งานบวชมังกรพร้อมสิทธิ์ร่วมกิจกรรมพิเศษภายในงาน
+            ยินดีต้อนรับสู่งานบวชมังกร<br class="show-mobile" />พร้อมสิทธิ์ร่วมกิจกรรมพิเศษภายในงาน
           </p>
         </div>
 
@@ -81,12 +81,12 @@ export async function render(el, params = {}) {
         <div class="reg-side">
           <span class="eyebrow">22 พฤศจิกาขอลาบวช</span>
           <h1 style="font-family:var(--hand);font-size:clamp(34px, 5vw, 52px)">บัตรผู้ร่วมงาน</h1>
-          <p style="color:var(--cocoa-2)">ลงทะเบียนเข้าร่วมงานบวชมังกร รับบัตรประจำตัว (E-Badge) เพื่อร่วมกิจกรรมและรับสิทธิ์พิเศษ</p>
+          <p style="color:var(--cocoa-2)">ลงทะเบียนเข้าร่วมงานบวชมังกร<br class="show-mobile" />รับบัตรประจำตัว (E-Badge) เพื่อร่วมกิจกรรมพิเศษ</p>
 
           <ol class="steps">
             <li><span class="n">1</span><p><strong>กรอกชื่อและเบอร์โทร</strong> หรือค้นหาบัตรเดิมที่เคยลงทะเบียน</p></li>
             <li><span class="n">2</span><p><strong>รับบัตร E-Badge ทันที</strong> บันทึกลงเครื่องหรือแคปหน้าจอไว้</p></li>
-            <li><span class="n">3</span><p><strong>รับสิทธิ์พิเศษในงาน</strong> ถ่ายภาพ Polaroid ย้อนยุค & สอยดาวลุ้นรางวัล</p></li>
+            <li><span class="n">3</span><p><strong>รับสิทธิ์พิเศษในงาน</strong> ถ่ายภาพ Polaroid & สอยดาวลุ้นรางวัล</p></li>
           </ol>
 
           ${currentTicket ? `

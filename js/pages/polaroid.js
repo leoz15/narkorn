@@ -93,11 +93,11 @@ function renderComingSoon(el) {
         <h1 class="hand" style="font-size:32px;color:var(--cocoa);margin:8px 0 14px;">ภาพที่ระลึกกับพระ</h1>
         
         <div style="display:inline-flex;align-items:center;gap:6px;padding:6px 16px;border-radius:999px;background:#fff3dc;color:#c27803;border:1px solid #fbd888;font-size:13px;font-weight:600;margin-bottom:20px;">
-          <span>⏳</span> เปิดให้ร่วมถ่ายภาพในวันงาน (22 พฤศจิกายน 2569)
+          <span>⏳</span> เปิดให้ร่วมถ่ายภาพในวันงาน<br class="show-mobile" /> (22 พฤศจิกายน 2569)
         </div>
 
         <p style="color:var(--cocoa-2);line-height:1.7;margin:0 auto 28px;max-width:420px;font-size:14.5px;">
-          ระบบถ่ายภาพ Digital Polaroid ที่ระลึกร่วมกับพระนวกะ พร้อมคำคมคติธรรมมงคล จะเปิดให้ทุกท่านร่วมบันทึกภาพความประทับใจในวันงานบวช
+          ระบบถ่ายภาพ Digital Polaroid ที่ระลึกร่วมกับพระพร้อมคำคมคติธรรมมงคล ในวันงานบวช
         </p>
 
         <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;">

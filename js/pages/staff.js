@@ -408,7 +408,7 @@ export async function render(el) {
             <div style="font-size:40px;background:linear-gradient(180deg,#fff6d8,#ffe7a8);width:62px;height:62px;display:grid;place-items:center;border-radius:18px;flex:none;box-shadow:var(--shadow-sm);">📸</div>
             <div>
               <h2 style="margin:0;font-size:22px;color:var(--cocoa);">ระบบ Digital Polaroid</h2>
-              <p style="margin:4px 0 0;font-size:13.5px;color:var(--cocoa-2);">ควบคุมการเปิด-ปิดหน้าถ่ายภาพที่ระลึกกับพระนวกะ</p>
+              <p style="margin:4px 0 0;font-size:13.5px;color:var(--cocoa-2);">ควบคุมการเปิด-ปิดหน้าถ่ายภาพที่ระลึกกับพระ</p>
             </div>
           </div>
           <div>

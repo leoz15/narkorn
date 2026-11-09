@@ -118,7 +118,7 @@ export async function ticketCard(t) {
     <div class="ticket-foot">
       <div><div class="k">เบอร์โทรศัพท์</div>${esc(t.phoneMasked || t.phone)}</div>
       <div><div class="k">ลงทะเบียนเมื่อ</div>${fmtTime(t.createdAt)}</div>
-      <div><div class="k">สถานที่จัดงาน</div>${esc(EVENT.venue)}</div>
+      <div><div class="k">สถานที่จัดงาน</div>พัทธสีมา วัดลานคา<br class="show-mobile" />ต.บางปลาม้า จ.สุพรรณบุรี</div>
       <div><div class="k">สิทธิ์ร่วมงาน</div>Polaroid · สอยดาว · ของที่ระลึก</div>
       <div style="grid-column:span 2;padding-top:10px;margin-top:4px;border-top:1px dashed rgba(74,52,40,0.14);display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted)">
         <span>รหัสผู้ร่วมงาน (Ref ID)</span>
