@@ -1,6 +1,6 @@
 import {
   EVENT, listRegistrations, getStats, onStats,
-  toggleCheckIn, deleteRegistration, seedDemo, resetAll,
+  toggleCheckIn, deleteRegistration, resetAll,
   getPolaroidConfig, savePolaroidConfig, isPolaroidOpen
 } from '../store.js';
 import { esc, toast, fmtTime, countUp, footer, icon } from '../ui.js';
@@ -245,7 +245,6 @@ export async function render(el) {
           </div>
           <div class="staff-topbar-actions">
             <button type="button" class="btn btn-sm" id="btn-export-csv">${icon('download')} ส่งออกรายชื่อ (CSV)</button>
-            <button type="button" class="btn btn-sm" id="btn-seed-demo">${icon('flask')} จำลองข้อมูลตัวอย่าง</button>
             <button type="button" class="btn btn-sm btn-ghost" id="btn-logout" style="color:var(--rose-d)">${icon('lock')} ล็อกหน้าจอ</button>
           </div>
         </div>
@@ -441,7 +440,6 @@ export async function render(el) {
 
           <div style="display:flex;gap:12px;flex-wrap:wrap;border-top:1px solid var(--line);padding-top:18px;align-items:center;">
             <a href="#/polaroid" target="_blank" class="btn btn-sm btn-primary">👁️ เปิดดูหน้า Polaroid ผู้ใช้งาน</a>
-            <button type="button" class="btn btn-sm" id="pol-copy-test-link">📋 คัดลอกลิงก์ทดสอบสำหรับเปิดในมือถือ</button>
           </div>
         </div>
       </div>
@@ -465,16 +463,6 @@ export async function render(el) {
       await savePolaroidConfig({ autoOpenOnEventDay: e.target.checked }, session.staffName);
       toast('บันทึกการตั้งค่าเปิดอัตโนมัติวันงานแล้ว', 'ok');
       renderPolaroidPanel();
-    });
-
-    wrap.querySelector('#pol-copy-test-link')?.addEventListener('click', async () => {
-      const testUrl = `${location.origin}${location.pathname}?polaroid=1#/polaroid`;
-      try {
-        await navigator.clipboard.writeText(testUrl);
-        toast('คัดลอกลิงก์ทดสอบ Polaroid แล้ว เปิดในมือถือได้ทันที', 'ok');
-      } catch {
-        prompt('คัดลอกลิงก์ทดสอบนี้ไปเปิดในมือถือ:', testUrl);
-      }
     });
   }
 
@@ -526,7 +514,7 @@ export async function render(el) {
         <div class="staff-empty-state">
           <div style="font-size:42px;margin-bottom:8px">📋</div>
           <strong>ยังไม่มีรายชื่อผู้ลงทะเบียนในหมวดหมู่นี้</strong>
-          <p>เมื่อผู้มาร่วมงานลงทะเบียนผ่านหน้า Checkin ออนไลน์ รายชื่อและยอดสถิติจะแสดงที่นี่ทันที หรือกดปุ่ม "🧪 จำลองข้อมูลตัวอย่าง" ด้านบนเพื่อทดสอบระบบ</p>
+          <p>เมื่อผู้มาร่วมงานลงทะเบียนผ่านหน้า Check-in ออนไลน์ รายชื่อและยอดสถิติจะแสดงที่นี่ทันที</p>
         </div>
       `;
       return;
@@ -713,14 +701,6 @@ export async function render(el) {
       a.remove();
       URL.revokeObjectURL(url);
       toast('ดาวน์โหลดไฟล์ CSV เรียบร้อย 📥', 'ok');
-    });
-
-    // Seed demo data
-    el.querySelector('#btn-seed-demo')?.addEventListener('click', async () => {
-      await seedDemo(20);
-      registrations = await listRegistrations();
-      renderGuestTable();
-      toast('เพิ่มข้อมูลตัวอย่าง 20 รายชื่อเรียบร้อย 🧪', 'ok');
     });
 
     // Reset all data

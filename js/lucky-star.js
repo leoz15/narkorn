@@ -119,6 +119,8 @@ export function mountLuckyStar(host, stage = document.body, opts = {}) {
         set(`🎉 ได้รับ <b>${esc(ctx.play.prize?.name || 'รางวัล')}</b> · แสดง QR ที่จุดรับรางวัล`, 'ดู QR รับรางวัล', false, 'is-win'); break;
       case 'redeemed':
         set(`✅ รับรางวัล <b>${esc(ctx.play.prize?.name || '')}</b> เรียบร้อยแล้ว`, 'ดูผล', false, 'is-outline'); break;
+      case 'forfeited':
+        set('↩️ สละสิทธิ์รางวัลนี้แล้ว (นำกลับสู่ตู้สอยดาว)', 'ดูผล', false, 'is-outline'); break;
       case 'none':
         set('ร่วมสนุกเรียบร้อยแล้ว · ขอบคุณที่ร่วมกิจกรรม 💛', 'ดูผล', false, 'is-outline'); break;
     }
@@ -220,6 +222,17 @@ export function mountLuckyStar(host, stage = document.body, opts = {}) {
   }
 
   async function showResult(play) {
+    if (play.status === 'forfeited') {
+      openModal(`
+        <button type="button" class="ls-x" data-close aria-label="ปิด">✕</button>
+        <div class="ls-res-star is-soft">${starSvg('sleepy')}</div>
+        <div class="ls-res-kicker">Lucky Star · สละสิทธิ์</div>
+        <h3 class="ls-res-title">สละสิทธิ์รับรางวัล</h3>
+        <p class="ls-res-note">รายการนี้สละสิทธิ์รับรางวัลแล้ว โดยรางวัลถูกนำกลับเข้าสู่ตู้สอยดาวเพื่อให้ผู้ร่วมงานท่านอื่นมีโอกาสสุ่มใหม่ ขอบคุณที่มาร่วมงานบุญ 🙏</p>
+        <button type="button" class="btn btn-primary btn-block" data-close>กลับสู่แผนที่ 3D</button>
+      `, 'none');
+      return;
+    }
     if (play.result === 'win') {
       const redeemed = play.status === 'redeemed';
       const qr = redeemed ? '' : await qrDataUrl(luckyQrPayload(play.claimCode), 6);

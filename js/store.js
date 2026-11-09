@@ -972,8 +972,8 @@ export function getLuckyWindow() {
 
 function prizeStock(prizes, plays) {
   return prizes.map(p => {
-    const awarded = plays.filter(x => x.prizeId === p.id).length;
-    const redeemed = plays.filter(x => x.prizeId === p.id && x.redeemedAt).length;
+    const awarded = plays.filter(x => (x.prizeId === p.id || (x.forfeitedPrizeId === p.id && !x.forfeitedAt)) && x.status !== 'forfeited' && !x.forfeitedAt).length;
+    const redeemed = plays.filter(x => (x.prizeId === p.id || x.forfeitedPrizeId === p.id) && x.redeemedAt).length;
     return { ...p, awarded, redeemed, remaining: Math.max(0, (Number(p.qty) || 0) - awarded) };
   });
 }
@@ -1029,21 +1029,30 @@ export async function deletePrize(id, staff = 'staff') {
 
 function playView(p, prizes) {
   if (!p) return null;
-  const prize = p.prizeId ? prizes.find(x => x.id === p.prizeId) : null;
+  const isForfeited = p.status === 'forfeited' || !!p.forfeitedAt;
+  const prizeId = p.prizeId || p.forfeitedPrizeId;
+  const prize = prizeId ? prizes.find(x => x.id === prizeId) : null;
+  const status = isForfeited ? 'forfeited' : p.redeemedAt ? 'redeemed' : p.prizeId ? 'won' : 'none';
   return {
     id: p.id,
     regId: p.regId,
     fullName: p.fullName,
-    result: p.result,               // 'win' | 'none'
-    status: p.result === 'win' ? (p.redeemedAt ? 'redeemed' : 'won') : 'none',
+    result: isForfeited ? 'forfeited' : p.result,               // 'win' | 'none' | 'forfeited'
+    status,                                                     // 'won' | 'redeemed' | 'none' | 'forfeited'
     prizeId: p.prizeId || null,
-    prize: prize
-      ? { id: prize.id, name: prize.name, desc: prize.desc, emoji: prize.emoji, image: prize.image }
-      : (p.prizeId ? { id: p.prizeId, name: p.prizeName, desc: '', emoji: '🎁', image: '' } : null),
-    claimCode: p.claimCode || null,
+    forfeitedPrizeId: p.forfeitedPrizeId || null,
+    forfeitedPrizeName: p.forfeitedPrizeName || null,
+    prize: isForfeited
+      ? null
+      : (prize
+        ? { id: prize.id, name: prize.name, desc: prize.desc, emoji: prize.emoji, image: prize.image }
+        : (p.prizeId ? { id: p.prizeId, name: p.prizeName, desc: '', emoji: '🎁', image: '' } : null)),
+    claimCode: isForfeited ? null : (p.claimCode || null),
     playedAt: p.playedAt,
     redeemedAt: p.redeemedAt || null,
     redeemedBy: p.redeemedBy || null,
+    forfeitedAt: p.forfeitedAt || null,
+    forfeitedBy: p.forfeitedBy || null,
   };
 }
 
@@ -1078,9 +1087,10 @@ export async function playLuckyStar(regToken) {
 
     // --- draw one star from the box ---
     const cfg = getLuckyConfig();
+    const activePlays = plays.filter(x => x.status !== 'forfeited' && !x.forfeitedAt);
     const stock = prizeStock(prizes, plays).filter(p => p.remaining > 0);
     const prizeStars = stock.reduce((s, p) => s + p.remaining, 0);
-    const starsLeft = Math.max(cfg.totalStars - plays.length, prizeStars);
+    const starsLeft = Math.max(cfg.totalStars - activePlays.length, prizeStars);
     let prize = null;
     if (starsLeft > 0) {
       let pick = randInt(starsLeft);
@@ -1138,6 +1148,13 @@ export async function findClaim(codeOrQr) {
     } catch (e) {}
   }
   if (!p) return { result: 'invalid' };
+  if (p.status === 'forfeited' || p.forfeitedAt) {
+    return {
+      result: 'forfeited',
+      play: playView(p, readPrizes()),
+      registration: null,
+    };
+  }
   let reg = read(KEY.regs, []).find(r => r.id === p.regId);
   if (!reg) {
     try {
@@ -1207,7 +1224,8 @@ export async function getLuckyStats() {
   const plays = readPlays();
   const prizes = prizeStock(readPrizes(), plays);
   const cfg = getLuckyConfig();
-  const winners = plays.filter(p => p.result === 'win');
+  const activePlays = plays.filter(p => p.status !== 'forfeited' && !p.forfeitedAt);
+  const winners = activePlays.filter(p => p.result === 'win' || p.prizeId);
   const prizeTotal = prizes.reduce((s, p) => s + (Number(p.qty) || 0), 0);
   const prizeRemaining = prizes.reduce((s, p) => s + p.remaining, 0);
   return {
@@ -1219,8 +1237,70 @@ export async function getLuckyStats() {
     prizeTotal,
     prizeRemaining,
     totalStars: cfg.totalStars,
-    starsLeft: Math.max(cfg.totalStars - plays.length, prizeRemaining, 0),
+    starsLeft: Math.max(cfg.totalStars - activePlays.length, prizeRemaining, 0),
   };
+}
+
+/**
+ * Staff revokes an uncollected/forfeited prize, returning it to the prize pool
+ * so others can draw it again. Does NOT affect check-in or registration.
+ */
+export async function revokeLuckyPrize(playId, staff = 'staff') {
+  await delay(150);
+  return withLuckyLock(async () => {
+    const plays = readPlays();
+    let p = plays.find(x => x.id === playId);
+    if (!p) {
+      try {
+        const fs = await getFirestoreModule();
+        if (fs?.db) {
+          const snap = await fs.getDoc(fs.doc(fs.db, 'luckyPlays', playId));
+          if (snap.exists()) {
+            p = snap.data();
+            plays.push(p);
+          }
+        }
+      } catch (e) {}
+    }
+    if (!p) throw new ApiError('NOT_FOUND', 'ไม่พบประวัติการสุ่มนี้');
+    if (p.redeemedAt) throw new ApiError('ALREADY_REDEEMED', 'ผู้ร่วมงานรับรางวัลไปแล้ว ไม่สามารถสละสิทธิ์ได้');
+    if (p.status === 'forfeited' || p.forfeitedAt) throw new ApiError('ALREADY_FORFEITED', 'รายการนี้สละสิทธิ์และคืนรางวัลสู่ตู้ไปแล้ว');
+    if (p.result !== 'win' && !p.prizeId) throw new ApiError('NO_PRIZE', 'รายการนี้ไม่ได้รับรางวัล');
+
+    const now = new Date().toISOString();
+    const oldPrizeId = p.prizeId;
+    const oldPrizeName = p.prizeName;
+    p.status = 'forfeited';
+    p.result = 'forfeited';
+    p.forfeitedAt = now;
+    p.forfeitedBy = staff;
+    p.forfeitedPrizeId = oldPrizeId;
+    p.forfeitedPrizeName = oldPrizeName;
+    p.prizeId = null;
+    p.claimCode = null;
+
+    write(KEY.lsPlays, plays);
+    audit('lucky.prize.forfeit', { staff, id: p.id, regId: p.regId, oldPrizeId, oldPrizeName });
+    emit();
+
+    try {
+      const fs = await getFirestoreModule();
+      if (fs?.db) {
+        await fs.setDoc(fs.doc(fs.db, 'luckyPlays', p.id), {
+          status: 'forfeited',
+          result: 'forfeited',
+          forfeitedAt: p.forfeitedAt,
+          forfeitedBy: p.forfeitedBy,
+          forfeitedPrizeId: oldPrizeId,
+          forfeitedPrizeName: oldPrizeName,
+          prizeId: null,
+          claimCode: null,
+        }, { merge: true });
+      }
+    } catch (e) {}
+
+    return { result: 'ok', play: playView(p, readPrizes()) };
+  });
 }
 
 export async function resetLuckyPlays(staff = 'staff') {

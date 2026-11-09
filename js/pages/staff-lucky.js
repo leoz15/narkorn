@@ -6,7 +6,7 @@
 import {
   listPrizes, savePrize, deletePrize, listLuckyPlays, getLuckyStats,
   getLuckyConfig, saveLuckyConfig, getLuckyWindow, findClaim, redeemPrize,
-  resetLuckyPlays, formatClaimCode, ApiError,
+  revokeLuckyPrize, resetLuckyPlays, formatClaimCode, ApiError,
 } from '../store.js';
 import { esc, toast, fmtTime, icon, waitForGlobal } from '../ui.js';
 import { starSvg } from '../lucky-star.js';
@@ -75,9 +75,6 @@ export function renderLuckyAdmin(root, session) {
               <span class="lsa-switch-ui"></span>
               <span><b>โหมดทดสอบ</b><small>เปิดกิจกรรมก่อนวันงาน (ปิดก่อนใช้งานจริง)</small></span>
             </label>
-            <div class="lsa-inline">
-              <button type="button" class="btn btn-sm" id="lsa-copy-test-link" title="คัดลอกลิงก์ทดสอบสำหรับเปิดในมือถือ">📋 ลิงก์ทดสอบบนมือถือ</button>
-            </div>
           </div>
         </div>
       </div>
@@ -91,8 +88,9 @@ export function renderLuckyAdmin(root, session) {
           <h3>${icon('camera', 'fill')} สแกน QR ยืนยันรับรางวัล</h3>
           <p class="lsa-hint">สแกน QR จากหน้าจอผู้ได้รับรางวัล หรือพิมพ์รหัส 8 หลัก · <b>ไม่ใช่การเช็กอินเข้างาน</b></p>
           <div class="lsa-scan-view" id="lsa-scan-view" hidden></div>
-          <div class="lsa-inline">
+          <div class="lsa-inline" style="gap:8px;">
             <button type="button" class="btn btn-sm" id="lsa-scan-btn">${icon('camera')} เปิดกล้องสแกน</button>
+            <button type="button" class="btn btn-sm btn-ghost" id="lsa-scan-refresh" title="รีเฟรชกล้องและล้างผลลัพธ์เพื่อเริ่มสแกนใหม่">🔄 รีเฟรชสแกนใหม่</button>
           </div>
           <form class="lsa-inline lsa-code-form" id="lsa-code-form">
             <input class="input" id="lsa-code" placeholder="เช่น K7Q2-M9XA" autocomplete="off" maxlength="20" />
@@ -214,7 +212,8 @@ export function renderLuckyAdmin(root, session) {
   const statusBadge = p => p.status === 'redeemed'
     ? '<span class="badge ok">✅ รับรางวัลแล้ว</span>'
     : p.status === 'won' ? '<span class="badge warn">⭐ รอรับรางวัล</span>'
-      : '<span class="badge">ไม่ได้รับรางวัล</span>';
+      : p.status === 'forfeited' ? '<span class="badge" style="background:rgba(200,80,60,.12);color:var(--rose-d);font-weight:600">↩️ สละสิทธิ์ (คืนตู้)</span>'
+        : '<span class="badge">ไม่ได้รับรางวัล</span>';
 
   function paintPlays(plays) {
     const q = playQuery.trim().toLowerCase().replace(/-/g, '');
@@ -224,7 +223,7 @@ export function renderLuckyAdmin(root, session) {
       if (playFilter === 'redeemed' && p.status !== 'redeemed') return false;
       if (playFilter === 'awaiting' && p.status !== 'won') return false;
       if (!q) return true;
-      return [p.fullName, p.regId, p.id, p.claimCode, p.prize?.name].some(v => String(v || '').toLowerCase().replace(/-/g, '').includes(q));
+      return [p.fullName, p.regId, p.id, p.claimCode, p.prize?.name, p.forfeitedPrizeName].some(v => String(v || '').toLowerCase().replace(/-/g, '').includes(q));
     });
     if (!list.length) {
       $('#lsa-plays').innerHTML = `<div class="staff-empty-state"><strong>ยังไม่มีผู้เข้าร่วมในหมวดนี้</strong><p>เมื่อผู้ร่วมงานกด "Check-in &amp; สอยดาว" บนแผนที่ 3D ผลจะแสดงที่นี่ทันที</p></div>`;
@@ -232,16 +231,27 @@ export function renderLuckyAdmin(root, session) {
     }
     $('#lsa-plays').innerHTML = `
       <table class="table staff-table">
-        <thead><tr><th>ลำดับ</th><th>รหัสตั๋ว</th><th>ชื่อผู้เข้าร่วม</th><th>ผลการสุ่ม</th><th>รหัสรับรางวัล</th><th>เวลาสุ่ม</th><th>สถานะ</th></tr></thead>
+        <thead><tr><th>ลำดับ</th><th>รหัสตั๋ว</th><th>ชื่อผู้เข้าร่วม</th><th>ผลการสุ่ม</th><th>รหัสรับรางวัล</th><th>เวลาสุ่ม</th><th>สถานะ</th><th style="text-align:right">จัดการ</th></tr></thead>
         <tbody>${list.map(p => `
           <tr class="${p.status === 'redeemed' ? 'row-checked' : ''}">
             <td><span class="mono-id">${esc(p.id)}</span></td>
             <td><span class="mono-id">${esc(p.regId)}</span></td>
             <td><strong>${esc(p.fullName)}</strong></td>
-            <td>${p.prize ? `<div class="lsa-prize-cell sm">${visual(p.prize)}<span>${esc(p.prize.name)}</span></div>` : '<span style="color:var(--muted)">—</span>'}</td>
+            <td>${p.prize
+              ? `<div class="lsa-prize-cell sm">${visual(p.prize)}<span>${esc(p.prize.name)}</span></div>`
+              : p.forfeitedPrizeName
+                ? `<div class="lsa-prize-cell sm" style="opacity:0.65"><span style="text-decoration:line-through">${esc(p.forfeitedPrizeName)}</span><small style="color:var(--rose-d);display:block">สละสิทธิ์</small></div>`
+                : '<span style="color:var(--muted)">—</span>'}</td>
             <td>${p.claimCode ? `<span class="mono-id">${esc(formatClaimCode(p.claimCode))}</span>` : '-'}</td>
             <td style="font-size:13px;color:var(--cocoa-2)">${fmtTime(p.playedAt)}</td>
             <td>${statusBadge(p)}</td>
+            <td style="text-align:right;white-space:nowrap">
+              ${p.status === 'won'
+                ? `<button type="button" class="btn btn-sm" style="background:#fff1f0;color:#cf1322;border:1px solid #ffa39e;font-size:12px;padding:3px 8px;font-weight:500;" data-forfeit="${esc(p.id)}" data-name="${esc(p.fullName)}" data-prize="${esc(p.prize?.name || 'รางวัล')}" title="ไม่มารับ / สละสิทธิ์ เพื่อนำรางวัลกลับเข้าสู่ตู้สอยดาว">↩️ คืนรางวัลสู่ตู้</button>`
+                : p.status === 'forfeited'
+                  ? '<span style="font-size:12px;color:var(--muted)">คืนตู้แล้ว</span>'
+                  : '<span style="color:var(--muted)">—</span>'}
+            </td>
           </tr>`).join('')}
         </tbody>
       </table>`;
@@ -269,7 +279,32 @@ export function renderLuckyAdmin(root, session) {
     const c = currentClaim;
     if (!c) { el.innerHTML = ''; return; }
     if (c.result === 'invalid') {
-      el.innerHTML = `<div class="lsa-claim-box is-bad">❌ <b>ไม่พบสิทธิ์รับรางวัล</b><br/><small>QR / รหัสไม่ถูกต้อง หรือไม่ใช่ QR รับรางวัล Lucky Star</small></div>`;
+      el.innerHTML = `
+        <div class="lsa-claim-box is-bad">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+            <div>
+              <b style="font-size:15px">❌ ไม่พบสิทธิ์รับรางวัล</b><br/>
+              <small style="opacity:0.9">QR / รหัสไม่ถูกต้อง หรือไม่ใช่ QR รับรางวัล Lucky Star</small>
+            </div>
+            <button type="button" class="btn btn-sm btn-ghost" id="lsa-claim-clear" title="ปิดกล่องนี้" style="flex:none;padding:2px 8px;">✕</button>
+          </div>
+          <button type="button" class="btn btn-sm btn-dark btn-block" id="lsa-claim-rescan" style="margin-top:6px;">🔄 สแกนใหม่ / ลองอีกครั้ง</button>
+        </div>`;
+      return;
+    }
+    if (c.result === 'forfeited') {
+      const p = c.play;
+      el.innerHTML = `
+        <div class="lsa-claim-box is-bad">
+          <div style="display:flex;justify-content:space-between;align-items:flex-start;gap:8px;">
+            <div>
+              <b style="font-size:15px;color:var(--rose-d)">↩️ รางวัลนี้ถูกสละสิทธิ์แล้ว (คืนสู่ตู้)</b><br/>
+              <small style="opacity:0.9"><b>${esc(p?.fullName || '')}</b> (${esc(p?.regId || '')}) · รางวัลเดิม: ${esc(p?.forfeitedPrizeName || 'รางวัล')}<br/>ถูกสละสิทธิ์และนำรางวัลกลับไปให้ผู้อื่นสุ่มใหม่แล้ว</small>
+            </div>
+            <button type="button" class="btn btn-sm btn-ghost" id="lsa-claim-clear" title="ปิดกล่องนี้" style="flex:none;padding:2px 8px;">✕</button>
+          </div>
+          <button type="button" class="btn btn-sm btn-dark btn-block" id="lsa-claim-rescan" style="margin-top:6px;">🔄 สแกนใหม่ / ตรวจสอบคนถัดไป</button>
+        </div>`;
       return;
     }
     const p = c.play;
@@ -278,9 +313,12 @@ export function renderLuckyAdmin(root, session) {
       <div class="lsa-claim-box ${done ? 'is-done' : 'is-ok'}">
         <div class="lsa-prize-cell">${visual(p.prize)}<div><strong>${esc(p.prize?.name || '')}</strong><small>${esc(p.fullName)} · ${esc(p.regId)} · ${esc(formatClaimCode(p.claimCode))}</small></div></div>
         ${done
-          ? `<div class="lsa-claim-msg">⚠️ <b>รับรางวัลไปแล้ว</b> เมื่อ ${fmtTime(p.redeemedAt)} โดย ${esc(p.redeemedBy || '-')}<br/><small>QR นี้ถูกใช้แล้ว ไม่สามารถรับซ้ำได้</small></div>`
+          ? `<div class="lsa-claim-msg">⚠️ <b>รับรางวัลไปแล้ว</b> เมื่อ ${fmtTime(p.redeemedAt)} โดย ${esc(p.redeemedBy || '-')}<br/><small>QR นี้ถูกใช้แล้ว ไม่สามารถรับซ้ำได้</small></div>
+             <button type="button" class="btn btn-sm btn-ghost btn-block" id="lsa-claim-rescan" style="margin-top:6px;">🔄 สแกนคนถัดไป / สแกนใหม่</button>`
           : `<div class="lsa-claim-msg">✅ สิทธิ์ถูกต้อง · ยังไม่ได้รับรางวัล</div>
-             <button type="button" class="btn btn-primary btn-block" id="lsa-confirm">${icon('check', 'fill')} ยืนยันส่งมอบรางวัล</button>`}
+             <button type="button" class="btn btn-primary btn-block" id="lsa-confirm">${icon('check', 'fill')} ยืนยันส่งมอบรางวัล</button>
+             <button type="button" class="btn btn-sm btn-ghost btn-block" id="lsa-forfeit-claim" style="color:var(--rose-d);margin-top:6px;">↩️ สละสิทธิ์ / ไม่มารับ (คืนรางวัลสู่ตู้)</button>
+             <button type="button" class="btn btn-sm btn-ghost btn-block" id="lsa-claim-rescan" style="margin-top:4px;">🔄 สแกนรหัสอื่น</button>`}
       </div>`;
   }
 
@@ -364,15 +402,6 @@ export function renderLuckyAdmin(root, session) {
     await saveLuckyConfig({ testMode: e.target.checked }, session.staffName);
     toast(e.target.checked ? '🧪 เปิดโหมดทดสอบ: กิจกรรมเปิดให้เล่นแล้ว' : 'ปิดโหมดทดสอบ: กลับไปใช้วันที่จริง', e.target.checked ? 'ok' : '');
   });
-  $('#lsa-copy-test-link')?.addEventListener('click', async () => {
-    const testUrl = `${location.origin}${location.pathname}?test=1#/map`;
-    try {
-      await navigator.clipboard.writeText(testUrl);
-      toast('คัดลอกลิงก์ทดสอบแล้ว เปิดในมือถือเพื่อทดสอบได้ทันที', 'ok');
-    } catch {
-      prompt('คัดลอกลิงก์ทดสอบนี้ไปเปิดในมือถือ:', testUrl);
-    }
-  });
   $('#lsa-reset').addEventListener('click', async () => {
     if (!confirm('⚠️ ล้างผลการเล่น Lucky Star ทั้งหมด? (สต็อกรางวัลจะกลับมาเต็ม · ไม่ยกเลิกสถานะเช็กอิน)')) return;
     await resetLuckyPlays(session.staffName);
@@ -380,13 +409,28 @@ export function renderLuckyAdmin(root, session) {
     toast('ล้างผลการเล่นทั้งหมดเรียบร้อย', '');
   });
 
-  /* ---------------- participants filter ---------------- */
+  /* ---------------- participants filter & actions ---------------- */
   $('#lsa-q').addEventListener('input', async e => { playQuery = e.target.value; paintPlays(await listLuckyPlays()); });
   $('#lsa-filters').addEventListener('click', async e => {
     const b = e.target.closest('[data-f]'); if (!b) return;
     playFilter = b.dataset.f;
     root.querySelectorAll('#lsa-filters .filter-pill').forEach(x => x.classList.toggle('active', x === b));
     paintPlays(await listLuckyPlays());
+  });
+  $('#lsa-plays').addEventListener('click', async e => {
+    const btn = e.target.closest('[data-forfeit]');
+    if (!btn) return;
+    const { forfeit: playId, name, prize } = btn.dataset;
+    if (!confirm(`ยืนยันการสละสิทธิ์รางวัล "${prize}" ของ ${name}?\n\nรางวัลชิ้นนี้จะถูกนำกลับเข้าตู้สอยดาวทันที เพื่อให้ผู้ร่วมงานท่านอื่นสุ่มได้`)) return;
+    try {
+      btn.disabled = true;
+      await revokeLuckyPrize(playId, session.staffName);
+      toast(`คืนรางวัล "${prize}" กลับสู่ตู้สอยดาวเรียบร้อย ✨`, 'ok');
+      await refresh();
+    } catch (err) {
+      btn.disabled = false;
+      toast(err.message || 'เกิดข้อผิดพลาดในการคืนรางวัล', 'err');
+    }
   });
 
   /* ---------------- redeem ---------------- */
@@ -402,6 +446,26 @@ export function renderLuckyAdmin(root, session) {
     if (v) lookup(v);
   });
   $('#lsa-claim').addEventListener('click', async e => {
+    if (e.target.closest('#lsa-claim-clear') || e.target.closest('#lsa-claim-rescan')) {
+      await resetScan();
+      return;
+    }
+    if (e.target.closest('#lsa-forfeit-claim') && currentClaim?.play) {
+      const p = currentClaim.play;
+      const prizeName = p.prize?.name || 'รางวัล';
+      if (!confirm(`ยืนยันการสละสิทธิ์รางวัล "${prizeName}" ของ ${p.fullName}?\n\nรางวัลจะถูกนำกลับเข้าสู่ตู้สอยดาวทันที เพื่อให้ผู้ร่วมงานท่านอื่นมีโอกาสสุ่มได้`)) return;
+      try {
+        await revokeLuckyPrize(p.id, session.staffName);
+        toast(`คืนรางวัล "${prizeName}" กลับสู่ตู้สอยดาวเรียบร้อย ✨`, 'ok');
+        currentClaim = null;
+        paintClaim();
+        $('#lsa-code').value = '';
+        await refresh();
+      } catch (err) {
+        toast(err.message || 'เกิดข้อผิดพลาดในการคืนรางวัล', 'err');
+      }
+      return;
+    }
     if (e.target.closest('#lsa-confirm') && currentClaim?.play) {
       e.target.closest('#lsa-confirm').disabled = true;
       const r = await redeemPrize(currentClaim.play.claimCode, session.staffName);
@@ -411,8 +475,11 @@ export function renderLuckyAdmin(root, session) {
       currentClaim = r.play ? { result: r.play.redeemedAt ? 'already' : 'ok', play: r.play } : { result: 'invalid' };
       paintClaim();
       $('#lsa-code').value = '';
+      await refresh();
     }
   });
+
+  let lastScannedText = '', lastScannedAt = 0;
 
   async function stopScan() {
     if (!scanner) return;
@@ -421,25 +488,73 @@ export function renderLuckyAdmin(root, session) {
     $('#lsa-scan-view').hidden = true;
     $('#lsa-scan-btn').innerHTML = `${icon('camera')} เปิดกล้องสแกน`;
   }
-  $('#lsa-scan-btn').addEventListener('click', async () => {
-    if (scanner) return stopScan();
+
+  async function startScan() {
+    await stopScan();
     try {
       const Html5Qrcode = await waitForGlobal('Html5Qrcode');
       $('#lsa-scan-view').hidden = false;
-      scanner = new Html5Qrcode('lsa-scan-view');
+      const scannerOpts = {
+        verbose: false,
+        experimentalFeatures: {
+          useBarCodeDetectorIfSupported: true,
+        },
+      };
+      if (window.Html5QrcodeSupportedFormats?.QR_CODE !== undefined) {
+        scannerOpts.formatsToSupport = [window.Html5QrcodeSupportedFormats.QR_CODE];
+      }
+      scanner = new Html5Qrcode('lsa-scan-view', scannerOpts);
       $('#lsa-scan-btn').innerHTML = `${icon('close')} ปิดกล้อง`;
-      let lastText = '', lastAt = 0;
-      await scanner.start({ facingMode: 'environment' }, { fps: 10, qrbox: 220 }, text => {
-        const now = Date.now();
-        if (text === lastText && now - lastAt < 2500) return; // debounce repeated frames
-        lastText = text; lastAt = now;
-        lookup(text);
-      });
+      lastScannedText = '';
+      lastScannedAt = 0;
+      await scanner.start(
+        { facingMode: 'environment' },
+        {
+          fps: 24,
+          qrbox: (w, h) => {
+            const min = Math.min(w, h);
+            const size = Math.max(260, Math.floor(min * 0.88));
+            return { width: size, height: size };
+          },
+        },
+        text => {
+          if (currentClaim && currentClaim.result === 'ok') return; // รอส่งมอบหรือเคลียร์ก่อน
+          const now = Date.now();
+          if (text === lastScannedText && now - lastScannedAt < 2500) return; // debounce
+          lastScannedText = text;
+          lastScannedAt = now;
+          lookup(text);
+        }
+      );
     } catch (err) {
       console.warn(err);
       toast('เปิดกล้องไม่ได้ กรุณาอนุญาตการใช้กล้อง หรือพิมพ์รหัสแทน', 'err');
       await stopScan();
     }
+  }
+
+  async function resetScan() {
+    currentClaim = null;
+    paintClaim();
+    $('#lsa-code').value = '';
+    lastScannedText = '';
+    lastScannedAt = 0;
+    if (scanner) {
+      await startScan();
+      toast('รีเฟรชกล้องเรียบร้อย พร้อมสแกนใหม่ ✨', 'ok');
+    } else {
+      await startScan();
+      toast('เปิดกล้องพร้อมสแกนแล้ว ✨', 'ok');
+    }
+  }
+
+  $('#lsa-scan-btn').addEventListener('click', async () => {
+    if (scanner) return stopScan();
+    await startScan();
+  });
+
+  $('#lsa-scan-refresh')?.addEventListener('click', async () => {
+    await resetScan();
   });
 
   resetForm();
