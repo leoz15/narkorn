@@ -6,7 +6,7 @@ import { buildMe } from './map-character.js';
 let activeAvatarHandle = null;
 
 /** Mount live animated 3D half-body bust of chosen character */
-export function mountTicketAvatar(canvas, gender = 'male') {
+export function mountTicketAvatar(canvas, gender = 'male', variant = 1) {
   if (!canvas) return null;
   if (activeAvatarHandle) {
     try { activeAvatarHandle.destroy(); } catch (_) {}
@@ -34,7 +34,7 @@ export function mountTicketAvatar(canvas, gender = 'male') {
   scene.add(amb, dir, fill);
 
   const disposables = [];
-  const { body } = buildMe(disposables, { gender, halfBody: true });
+  const { body } = buildMe(disposables, { gender, variant, halfBody: true });
   // Center head-to-chest portrait in round viewport
   body.position.set(0, -1.16, 0);
   scene.add(body);
@@ -118,8 +118,8 @@ export async function ticketCard(t) {
     <div class="ticket-foot">
       <div><div class="k">เบอร์โทรศัพท์</div>${esc(t.phoneMasked || t.phone)}</div>
       <div><div class="k">ลงทะเบียนเมื่อ</div>${fmtTime(t.createdAt)}</div>
-      <div><div class="k">สถานที่จัดงาน</div>พัทธสีมา วัดลานคา<br class="show-mobile" />ต.บางปลาม้า จ.สุพรรณบุรี</div>
-      <div><div class="k">สิทธิ์ร่วมงาน</div>Polaroid · สอยดาว · ของที่ระลึก</div>
+      <div><div class="k">สถานที่จัดงาน</div>วัดลานคา<br />ต.บางปลาม้า จ.สุพรรณบุรี</div>
+      <div><div class="k">สิทธิ์ร่วมงาน</div>Polaroid สอยดาว</div>
       <div style="grid-column:span 2;padding-top:10px;margin-top:4px;border-top:1px dashed rgba(74,52,40,0.14);display:flex;justify-content:space-between;align-items:center;font-size:12px;color:var(--muted)">
         <span>รหัสผู้ร่วมงาน (Ref ID)</span>
         <span style="font-family:ui-monospace, monospace;font-weight:600;letter-spacing:.06em;color:var(--cocoa-2)">${esc(t.id)}</span>
@@ -205,8 +205,8 @@ export async function ticketImage(t) {
   g.fillText('สถานที่จัดงาน', leftX, 850);
   g.fillText('สิทธิ์ร่วมงาน', rightX, 850);
   g.font = '600 22px Prompt'; g.fillStyle = '#4a3428';
-  g.fillText('วัดลานคา สุพรรณบุรี', leftX, 885);
-  g.fillText('Polaroid · สอยดาว · ของที่ระลึก', rightX, 885);
+  g.fillText('วัดลานคา จ.สุพรรณบุรี', leftX, 885);
+  g.fillText('Polaroid สอยดาว', rightX, 885);
 
   // Footer Ref & Blessing
   g.textAlign = 'center';
@@ -227,7 +227,7 @@ export function bindTicketActions(root, t) {
   // Mount live animated 3D character half-body avatar
   const canvas = root.querySelector('#ticket-avatar-canvas');
   if (canvas) {
-    mountTicketAvatar(canvas, t.gender || 'male');
+    mountTicketAvatar(canvas, t.gender || 'male', t.avatarVariant || 1);
   }
 
   root.querySelector('#btn-save-ticket')?.addEventListener('click', async () => {

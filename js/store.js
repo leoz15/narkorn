@@ -456,12 +456,14 @@ export async function registerGuest({
   }
 
   const now = new Date().toISOString();
+  const avatarVariant = Math.floor(Math.random() * 3) + 1;
   const reg = {
     id: nextRegId(),
     token: secureToken(),
     fullName: name,
     phone: tel,
     gender: (gender === 'female' ? 'female' : 'male'),
+    avatarVariant,
     pax: partySize,
     note: String(note || '').trim(),
     source,
@@ -491,6 +493,14 @@ export async function registerGuest({
   return publicView(reg);
 }
 
+/** Deterministic fallback for legacy records without avatarVariant */
+function resolveAvatarVariant(r) {
+  const v = Number(r?.avatarVariant);
+  if (v === 1 || v === 2 || v === 3) return v;
+  const num = parseInt(String(r?.id || '').replace(/\D/g, ''), 10);
+  return Number.isFinite(num) && num > 0 ? ((num - 1) % 3) + 1 : 1;
+}
+
 /** What the guest's device is allowed to see/keep. */
 function publicView(r) {
   return {
@@ -498,6 +508,7 @@ function publicView(r) {
     token: r.token,
     fullName: r.fullName,
     gender: r.gender || 'male',
+    avatarVariant: resolveAvatarVariant(r),
     phone: r.phone || '',
     phoneMasked: r.phone ? maskPhone(r.phone) : '-',
     pax: Number(r.pax) || 1,

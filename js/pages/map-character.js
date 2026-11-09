@@ -183,8 +183,9 @@ export class NavGrid {
  * ===================================================================== */
 const JOINTS = ['me_hips', 'me_torso', 'me_head', 'me_armL', 'me_foreL', 'me_armR', 'me_foreR', 'me_legL', 'me_shinL', 'me_legR', 'me_shinR'];
 
-export function buildMe(disposables, { gender = 'male', halfBody = false } = {}) {
+export function buildMe(disposables, { gender = 'male', variant = 1, halfBody = false } = {}) {
   const isFemale = gender === 'female';
+  const v = (variant === 2 || variant === 3) ? variant : 1;
   const mats = {};
   const M = (c, rough = 0.58, metal = 0.03) => {
     const key = `${c}_${rough}_${metal}`;
@@ -195,25 +196,72 @@ export function buildMe(disposables, { gender = 'male', halfBody = false } = {})
     return mats[key];
   };
 
-  // Palettes inspired by the reference figures:
-  //  - male  : chestnut swept hair, beige jacket, blue overalls, red scarf
-  //  - female: long straight blue-black hair, light denim jacket, white tee, jeans
-  const C = isFemale ? {
-    skin: '#f8d6bf', skinShade: '#eab49a', blush: '#f5a3a0',
-    hair: '#1b2226', hairHi: '#2b363b',
-    iris: '#4a2c1d', pupil: '#1a0f0b', lid: '#1a1210', brow: '#1d1816',
-    lip: '#cf5f68', nose: '#e8b096', freckle: '#d39a82',
-    top: '#b8cfd6', topShade: '#9db7c0', inner: '#fbfbf8', button: '#dfe5e8',
-    bottom: '#5b87b8', cuff: '#8fb0d2', shoe: '#a9b7c2', shoeSole: '#eef1f3', lace: '#ffffff',
-  } : {
-    skin: '#f6cdb0', skinShade: '#e5a98c', blush: '#f39b92',
-    hair: '#6a3a22', hairHi: '#86502f',
-    iris: '#5b3520', pupil: '#1d100a', lid: '#3a2216', brow: '#5a311d',
-    lip: '#b5525a', nose: '#ef8d7f', freckle: '#d39a82',
-    top: '#e2d2b2', topShade: '#cbb790', inner: '#4f86c4', button: '#e6c15a',
-    bottom: '#4a7fbd', cuff: '#4a7fbd', shoe: '#6b4630', shoeSole: '#3a2619', lace: '#e9dcc4',
-    scarf: '#d2362d',
+  // 6 Character Palettes (3 Male + 3 Female):
+  //  - male 1  : chestnut swept hair, beige jacket, blue overalls, red scarf
+  //  - male 2  : feathery warm brown hair, dusty sky-blue collared shirt, beige chinos, brown shoes
+  //  - male 3  : jet-black spiky hair, pastel purple short-sleeve polo, blue jeans with black belt, black sneakers
+  //  - female 1: long straight blue-black hair, light denim jacket, white tee, jeans
+  //  - female 2: caramel-brown wavy side-ponytail, round dark-brown glasses, white blouse, tan shoulder bag
+  //  - female 3: chocolate-brown wavy hair, pastel pink cap/beret, mustard jacket over graphic tee, pink pleated skirt
+  const PALETTES = {
+    male: {
+      1: {
+        skin: '#f6cdb0', skinShade: '#e5a98c', blush: '#f39b92',
+        hair: '#6a3a22', hairHi: '#86502f',
+        iris: '#5b3520', pupil: '#1d100a', lid: '#3a2216', brow: '#5a311d',
+        lip: '#b5525a', nose: '#ef8d7f', freckle: '#d39a82',
+        top: '#e2d2b2', topShade: '#cbb790', inner: '#4f86c4', button: '#e6c15a',
+        bottom: '#4a7fbd', cuff: '#4a7fbd', shoe: '#6b4630', shoeSole: '#3a2619', lace: '#e9dcc4',
+        scarf: '#d2362d',
+      },
+      2: {
+        skin: '#f6cdb0', skinShade: '#e5a98c', blush: '#f39b92',
+        hair: '#5a3c28', hairHi: '#885e3f',
+        iris: '#4e2d1b', pupil: '#1a0f0a', lid: '#341e14', brow: '#4e3322',
+        lip: '#c46258', nose: '#e9a48d', freckle: '#d39a82',
+        top: '#789ec2', topShade: '#5d83a8', inner: '#f7f7f4', button: '#ffffff',
+        bottom: '#d7c3aa', cuff: '#c9b398', shoe: '#7d4e32', shoeSole: '#f2efe9', lace: '#e5ddd0',
+      },
+      3: {
+        skin: '#f5c39e', skinShade: '#e2a37d', blush: '#ef9589',
+        hair: '#18191d', hairHi: '#2c2e36',
+        iris: '#4a2a19', pupil: '#140b07', lid: '#181412', brow: '#18191d',
+        lip: '#c25e52', nose: '#e69f82', freckle: '#d39a82',
+        top: '#bfa8d8', topShade: '#a88ec5', inner: '#d5c6eb', button: '#ffffff',
+        bottom: '#467099', cuff: '#88a7c4', shoe: '#202125', shoeSole: '#f4f4f6', lace: '#35373d',
+        belt: '#151619', buckle: '#d4dae0',
+      },
+    },
+    female: {
+      1: {
+        skin: '#f8d6bf', skinShade: '#eab49a', blush: '#f5a3a0',
+        hair: '#1b2226', hairHi: '#2b363b',
+        iris: '#4a2c1d', pupil: '#1a0f0b', lid: '#1a1210', brow: '#1d1816',
+        lip: '#cf5f68', nose: '#e8b096', freckle: '#d39a82',
+        top: '#b8cfd6', topShade: '#9db7c0', inner: '#fbfbf8', button: '#dfe5e8',
+        bottom: '#5b87b8', cuff: '#8fb0d2', shoe: '#a9b7c2', shoeSole: '#eef1f3', lace: '#ffffff',
+      },
+      2: {
+        skin: '#f8d6bf', skinShade: '#eab49a', blush: '#f49e99',
+        hair: '#8c5838', hairHi: '#ad734d',
+        iris: '#59331e', pupil: '#1a0f0b', lid: '#1f1410', brow: '#683f26',
+        lip: '#dc6e67', nose: '#eba98e', freckle: '#d39a82',
+        top: '#fbfaf7', topShade: '#ebe6dc', inner: '#f3eee6', button: '#ffffff',
+        bottom: '#6f4e37', cuff: '#6f4e37', shoe: '#8a5a36', shoeSole: '#f3efe8', lace: '#e8dfd5',
+        glasses: '#2b1c15', bag: '#b8763e', belt: '#5e402b', buckle: '#dfc56b',
+      },
+      3: {
+        skin: '#f8d6bf', skinShade: '#eab49a', blush: '#f59e9b',
+        hair: '#462e23', hairHi: '#5e4032',
+        iris: '#4a2918', pupil: '#1a0f0b', lid: '#1d120e', brow: '#3d261c',
+        lip: '#d8656c', nose: '#eba990', freckle: '#d39a82',
+        top: '#f09c38', topShade: '#d98224', inner: '#fbfaf8', button: '#e39030',
+        bottom: '#f2c8be', cuff: '#f6f6f8', shoe: '#f6f6f8', shoeSole: '#ffffff', lace: '#e8e8ee',
+        hat: '#f4afa3', hatShade: '#eb9e91', gold: '#eab949',
+      },
+    },
   };
+  const C = PALETTES[isFemale ? 'female' : 'male'][v];
 
   const mesh = (geo, color, parent, x = 0, y = 0, z = 0, rough = 0.58) => {
     const m = new THREE.Mesh(geo, M(color, rough));
@@ -247,52 +295,141 @@ export function buildMe(disposables, { gender = 'male', halfBody = false } = {})
   const hips = group('me_hips', body, 0, 0.54, 0);
 
   if (!halfBody) {
-    // overalls / jeans pelvis
-    mesh(new THREE.CylinderGeometry(0.152, 0.165, 0.16, 20), C.bottom, hips, 0, 0.01, 0, 0.7);
+    if (isFemale && v === 3) {
+      // Female 3: Flared pastel-pink pleated skirt
+      mesh(new THREE.CylinderGeometry(0.145, 0.215, 0.24, 24), C.bottom, hips, 0, -0.02, 0, 0.65);
+      for (let k = 0; k < 14; k++) {
+        const ang = (k / 14) * Math.PI * 2;
+        const pleat = mesh(new THREE.CylinderGeometry(0.018, 0.028, 0.23, 8), k % 2 ? '#e9bcb1' : C.bottom, hips, Math.cos(ang) * 0.17, -0.02, Math.sin(ang) * 0.17, 0.65);
+        pleat.rotation.z = -Math.cos(ang) * 0.24;
+        pleat.rotation.x = Math.sin(ang) * 0.24;
+      }
+    } else {
+      // Pelvis trousers / jeans / skirt base
+      mesh(new THREE.CylinderGeometry(0.152, 0.165, 0.16, 20), C.bottom, hips, 0, 0.01, 0, 0.7);
+      // Belt for Male 3 & Female 2
+      if ((!isFemale && v === 3) || (isFemale && v === 2)) {
+        mesh(new THREE.CylinderGeometry(0.155, 0.157, 0.036, 22), C.belt, hips, 0, 0.075, 0, 0.45);
+        mesh(new THREE.BoxGeometry(0.048, 0.042, 0.022), C.buckle, hips, 0, 0.075, 0.152, 0.3);
+      }
+    }
   }
 
-  // ---- Torso: open jacket over inner layer ----
+  // ---- Torso ----
   const torso = group('me_torso', hips, 0, 0.08, 0);
   mesh(new THREE.CylinderGeometry(0.145, 0.155, 0.30, 22), C.top, torso, 0, 0.16, 0, 0.66);
   const chest = mesh(new THREE.SphereGeometry(0.148, 22, 16), C.top, torso, 0, 0.24, 0, 0.66);
   chest.scale.set(1.06, 0.72, 0.88);
-  // inner layer visible through the open jacket (male: overall bib · female: white tee)
-  mesh(new THREE.CylinderGeometry(0.151, 0.159, 0.26, 20, 1, false, -0.42, 0.84), C.inner, torso, 0, 0.17, 0, 0.62);
-  // jacket lapels framing the opening
-  for (const s of [-1, 1]) {
-    const lapel = mesh(new THREE.BoxGeometry(0.042, 0.26, 0.022), C.top, torso, s * 0.066, 0.17, 0.146, 0.66);
-    lapel.rotation.y = s * 0.42;
-    lapel.rotation.z = s * 0.06;
-  }
 
-  if (isFemale) {
-    // denim collar + folded collar flaps
+  if (isFemale && v === 1) {
+    // Female 1 (Existing): Open light denim jacket over white tee
+    mesh(new THREE.CylinderGeometry(0.151, 0.159, 0.26, 20, 1, false, -0.42, 0.84), C.inner, torso, 0, 0.17, 0, 0.62);
+    for (const s of [-1, 1]) {
+      const lapel = mesh(new THREE.BoxGeometry(0.042, 0.26, 0.022), C.top, torso, s * 0.066, 0.17, 0.146, 0.66);
+      lapel.rotation.y = s * 0.42;
+      lapel.rotation.z = s * 0.06;
+    }
     const collar = mesh(new THREE.TorusGeometry(0.088, 0.02, 12, 22), C.top, torso, 0, 0.318, 0.005, 0.66);
     collar.rotation.x = Math.PI / 2 + 0.08;
     for (const s of [-1, 1]) {
       const flap = mesh(new THREE.BoxGeometry(0.075, 0.05, 0.014), C.top, torso, s * 0.06, 0.305, 0.112, 0.66);
       flap.rotation.set(-0.5, s * 0.4, s * 0.55);
-      // chest pockets with flaps + buttons
       const pocket = mesh(new THREE.BoxGeometry(0.046, 0.046, 0.012), C.topShade, torso, s * 0.098, 0.215, 0.124, 0.66);
       pocket.rotation.y = s * 0.66;
       const pflap = mesh(new THREE.BoxGeometry(0.05, 0.016, 0.016), C.top, torso, s * 0.1, 0.243, 0.126, 0.66);
       pflap.rotation.y = s * 0.66;
       mesh(new THREE.SphereGeometry(0.008, 8, 6), C.button, torso, s * 0.104, 0.236, 0.136, 0.35);
     }
-  } else {
-    // overall straps + gold buttons + bib pocket
+  } else if (isFemale && v === 2) {
+    // Female 2: Crisp white collared blouse + camel leather shoulder bag strap
+    // Open V-neck skin peek
+    const vNeck = mesh(new THREE.ConeGeometry(0.048, 0.09, 3), C.skin, torso, 0, 0.295, 0.132, 0.55);
+    vNeck.rotation.set(Math.PI + 0.18, Math.PI / 3, 0);
+    vNeck.scale.set(1, 1, 0.4);
+    const collar = mesh(new THREE.TorusGeometry(0.086, 0.019, 12, 22), C.top, torso, 0, 0.318, 0.004, 0.6);
+    collar.rotation.x = Math.PI / 2 + 0.08;
     for (const s of [-1, 1]) {
+      const flap = mesh(new THREE.BoxGeometry(0.078, 0.052, 0.014), C.top, torso, s * 0.058, 0.302, 0.114, 0.6);
+      flap.rotation.set(-0.48, s * 0.38, s * 0.52);
+    }
+    // Center button placket + pearl buttons
+    mesh(new THREE.BoxGeometry(0.024, 0.22, 0.012), C.topShade, torso, 0, 0.15, 0.152, 0.62);
+    for (const by of [0.22, 0.16, 0.10]) {
+      mesh(new THREE.SphereGeometry(0.0075, 8, 6), C.button, torso, 0, by, 0.159, 0.3);
+    }
+    // Camel leather shoulder bag strap on her right shoulder (s = -1)
+    const strap = mesh(new THREE.CylinderGeometry(0.154, 0.158, 0.026, 20), C.bag, torso, -0.105, 0.18, 0.0, 0.5);
+    strap.rotation.z = Math.PI / 2 - 0.18;
+    strap.scale.set(1.04, 1, 1.02);
+    if (!halfBody) {
+      const bagBody = mesh(new THREE.BoxGeometry(0.065, 0.13, 0.14), C.bag, torso, -0.168, 0.02, -0.01, 0.52);
+      bagBody.rotation.z = 0.08;
+    }
+  } else if (isFemale && v === 3) {
+    // Female 3: Mustard-yellow open jacket over white graphic tee + gold pendant necklace
+    mesh(new THREE.CylinderGeometry(0.151, 0.159, 0.26, 20, 1, false, -0.45, 0.90), C.inner, torso, 0, 0.17, 0, 0.62);
+    for (const s of [-1, 1]) {
+      const lapel = mesh(new THREE.BoxGeometry(0.044, 0.26, 0.024), C.top, torso, s * 0.068, 0.17, 0.146, 0.66);
+      lapel.rotation.y = s * 0.42;
+      lapel.rotation.z = s * 0.05;
+      // Hood/collar flaps
+      const flap = mesh(new THREE.BoxGeometry(0.078, 0.052, 0.018), C.top, torso, s * 0.065, 0.305, 0.11, 0.66);
+      flap.rotation.set(-0.45, s * 0.4, s * 0.5);
+      // Lower jacket flap pockets
+      const pocket = mesh(new THREE.BoxGeometry(0.048, 0.055, 0.014), C.topShade, torso, s * 0.102, 0.11, 0.122, 0.66);
+      pocket.rotation.y = s * 0.65;
+    }
+    const collar = mesh(new THREE.TorusGeometry(0.09, 0.022, 12, 22), C.top, torso, 0, 0.318, 0.002, 0.66);
+    collar.rotation.x = Math.PI / 2 + 0.08;
+    // Gold pendant necklace & cute graphic tee motifs
+    mesh(new THREE.TorusGeometry(0.016, 0.005, 8, 16), C.gold, torso, 0, 0.278, 0.152, 0.28);
+    mesh(new THREE.SphereGeometry(0.018, 12, 10), '#ef9d56', torso, -0.012, 0.205, 0.154, 0.5).scale.set(1.2, 0.9, 0.4);
+    mesh(new THREE.SphereGeometry(0.013, 10, 8), '#5f82b8', torso, 0.016, 0.232, 0.153, 0.5).scale.set(1.1, 0.8, 0.4);
+    mesh(new THREE.SphereGeometry(0.009, 8, 6), '#e56b55', torso, 0.018, 0.192, 0.154, 0.5).scale.set(1, 1, 0.4);
+  } else if (!isFemale && v === 1) {
+    // Male 1 (Existing): Beige jacket over blue overall bib + red scarf
+    mesh(new THREE.CylinderGeometry(0.151, 0.159, 0.26, 20, 1, false, -0.42, 0.84), C.inner, torso, 0, 0.17, 0, 0.62);
+    for (const s of [-1, 1]) {
+      const lapel = mesh(new THREE.BoxGeometry(0.042, 0.26, 0.022), C.top, torso, s * 0.066, 0.17, 0.146, 0.66);
+      lapel.rotation.y = s * 0.42;
+      lapel.rotation.z = s * 0.06;
       mesh(new THREE.BoxGeometry(0.03, 0.07, 0.012), C.inner, torso, s * 0.055, 0.31, 0.13, 0.62);
       mesh(new THREE.SphereGeometry(0.011, 10, 8), C.button, torso, s * 0.055, 0.282, 0.158, 0.3);
     }
     mesh(new THREE.BoxGeometry(0.062, 0.046, 0.01), '#3f72ad', torso, 0, 0.2, 0.158, 0.62);
-    // red neckerchief: wrap + knot + triangle tail
     const wrap = mesh(new THREE.TorusGeometry(0.086, 0.028, 12, 22), C.scarf, torso, 0, 0.318, 0.005, 0.6);
     wrap.rotation.x = Math.PI / 2 + 0.08;
     mesh(new THREE.SphereGeometry(0.034, 14, 10), C.scarf, torso, 0, 0.296, 0.1, 0.6);
     const tail = mesh(new THREE.ConeGeometry(0.055, 0.095, 3), C.scarf, torso, 0, 0.245, 0.122, 0.6);
     tail.rotation.set(Math.PI + 0.25, Math.PI / 3, 0);
     tail.scale.set(1, 1, 0.45);
+  } else if (!isFemale && v === 2) {
+    // Male 2: Dusty sky-blue collared button-up shirt
+    const collar = mesh(new THREE.TorusGeometry(0.086, 0.02, 12, 22), C.top, torso, 0, 0.318, 0.005, 0.65);
+    collar.rotation.x = Math.PI / 2 + 0.08;
+    for (const s of [-1, 1]) {
+      const flap = mesh(new THREE.BoxGeometry(0.075, 0.048, 0.014), C.top, torso, s * 0.058, 0.304, 0.114, 0.65);
+      flap.rotation.set(-0.5, s * 0.4, s * 0.52);
+      const pocket = mesh(new THREE.BoxGeometry(0.046, 0.048, 0.012), C.topShade, torso, s * 0.082, 0.21, 0.134, 0.65);
+      pocket.rotation.y = s * 0.52;
+    }
+    // Center button placket & white buttons
+    mesh(new THREE.BoxGeometry(0.026, 0.25, 0.012), '#88afd1', torso, 0, 0.16, 0.152, 0.65);
+    for (const by of [0.26, 0.19, 0.12]) {
+      mesh(new THREE.SphereGeometry(0.0085, 8, 6), C.button, torso, 0, by, 0.159, 0.3);
+    }
+  } else if (!isFemale && v === 3) {
+    // Male 3: Sleek black short-sleeve polo shirt with collar & 2 buttons
+    const collar = mesh(new THREE.TorusGeometry(0.086, 0.021, 12, 22), C.topShade, torso, 0, 0.318, 0.005, 0.6);
+    collar.rotation.x = Math.PI / 2 + 0.08;
+    for (const s of [-1, 1]) {
+      const flap = mesh(new THREE.BoxGeometry(0.072, 0.046, 0.014), C.topShade, torso, s * 0.055, 0.304, 0.114, 0.6);
+      flap.rotation.set(-0.5, s * 0.38, s * 0.5);
+    }
+    // Polo placket + 2 small buttons
+    mesh(new THREE.BoxGeometry(0.028, 0.11, 0.014), C.inner, torso, 0, 0.245, 0.151, 0.58);
+    mesh(new THREE.SphereGeometry(0.0075, 8, 6), C.button, torso, 0, 0.262, 0.159, 0.3);
+    mesh(new THREE.SphereGeometry(0.0075, 8, 6), C.button, torso, 0, 0.228, 0.159, 0.3);
   }
 
   // ---- Big Chibi Head ----
@@ -312,6 +449,11 @@ export function buildMe(disposables, { gender = 'male', halfBody = false } = {})
     const earIn = mesh(new THREE.SphereGeometry(0.034, 12, 10), C.skinShade, head, s * 0.293, 0.225, 0.005, 0.6);
     earIn.scale.set(0.45, 0.8, 0.6);
     earIn.castShadow = false;
+    // Female 3: small cute gold earrings
+    if (isFemale && v === 3) {
+      const earStud = mesh(new THREE.SphereGeometry(0.012, 8, 8), C.gold, head, s * 0.282, 0.176, 0.012, 0.25);
+      earStud.castShadow = false;
+    }
   }
 
   // Big glossy brown eyes (sclera + iris + pupil + 2 highlights) with lid line
@@ -340,8 +482,9 @@ export function buildMe(disposables, { gender = 'male', halfBody = false } = {})
     }
     [sclera, iris, pupil, hl1, hl2, lid].forEach(m => { m.castShadow = false; });
 
-    // eyebrows (female: thicker & darker)
-    const brow = mesh(new THREE.TorusGeometry(0.05, isFemale ? 0.0105 : 0.0075, 8, 20, Math.PI * 0.45), C.brow, head, s * 0.1, 0.268, 0.222, 0.5);
+    // eyebrows
+    const browThickness = isFemale ? 0.0105 : (v === 3 ? 0.011 : 0.008);
+    const brow = mesh(new THREE.TorusGeometry(0.05, browThickness, 8, 20, Math.PI * 0.45), C.brow, head, s * 0.1, 0.268, 0.222, 0.5);
     brow.rotation.set(-0.15, s * 0.36, Math.PI * 0.275);
     brow.castShadow = false;
 
@@ -350,8 +493,9 @@ export function buildMe(disposables, { gender = 'male', halfBody = false } = {})
     cheek.scale.set(1.2, 0.7, 0.3);
     cheek.castShadow = false;
   }
-  if (isFemale) {
-    // light freckles across the cheeks
+
+  // Female 1: light freckles across the cheeks
+  if (isFemale && v === 1) {
     for (const s of [-1, 1]) {
       for (const [fx, fy] of [[0.125, 0.205], [0.145, 0.212], [0.16, 0.2], [0.138, 0.195]]) {
         const fr = mesh(new THREE.SphereGeometry(0.0055, 8, 6), C.freckle, head, s * fx, fy, 0.219, 0.7);
@@ -361,7 +505,22 @@ export function buildMe(disposables, { gender = 'male', halfBody = false } = {})
     }
   }
 
-  // little nose (male: rosy red tip like the reference)
+  // Female 2: Big round dark-brown eyeglasses
+  if (isFemale && v === 2) {
+    for (const s of [-1, 1]) {
+      const rim = mesh(new THREE.TorusGeometry(0.072, 0.007, 10, 32), C.glasses, head, s * 0.096, 0.226, 0.244, 0.3);
+      rim.rotation.set(-0.04, s * 0.26, 0);
+      rim.scale.set(1.04, 0.96, 1);
+      rim.castShadow = false;
+      const temple = mesh(new THREE.BoxGeometry(0.008, 0.009, 0.16), C.glasses, head, s * 0.186, 0.238, 0.16, 0.3);
+      temple.rotation.y = s * 0.35;
+      temple.castShadow = false;
+    }
+    const bridge = mesh(new THREE.TorusGeometry(0.026, 0.0065, 8, 16, Math.PI), C.glasses, head, 0, 0.232, 0.258, 0.3);
+    bridge.castShadow = false;
+  }
+
+  // little nose
   const nose = mesh(new THREE.SphereGeometry(0.016, 12, 10), C.nose, head, 0, 0.19, 0.252, 0.55);
   nose.scale.set(1.2, 0.85, 0.7);
   nose.castShadow = false;
@@ -376,54 +535,140 @@ export function buildMe(disposables, { gender = 'male', halfBody = false } = {})
   hairCap.scale.set(1.13, 1.02, 1.07);
   hairCap.rotation.x = -0.55;
 
-  if (isFemale) {
-    // center part: two soft crown lobes
+  if (isFemale && v === 1) {
+    // Female 1 (Existing): Center-parted long straight blue-black hair
     for (const s of [-1, 1]) {
       const lobe = mesh(new THREE.SphereGeometry(0.17, 20, 16), C.hair, head, s * 0.1, 0.42, 0.04, 0.45);
       lobe.scale.set(1.1, 0.62, 1.15);
       lobe.rotation.z = -s * 0.2;
     }
-    // long straight face-framing layers falling past the shoulders
     for (const s of [-1, 1]) {
       strand([[s * 0.015, 0.49, 0.15], [s * 0.13, 0.45, 0.22], [s * 0.24, 0.34, 0.16], [s * 0.285, 0.2, 0.1], [s * 0.3, 0.05, 0.07], [s * 0.32, -0.1, 0.05], [s * 0.35, -0.18, 0.06]], 0.05, 0.036, C.hair, head, 26);
       strand([[s * 0.06, 0.5, 0.08], [s * 0.2, 0.44, 0.12], [s * 0.29, 0.32, 0.06], [s * 0.31, 0.15, 0.02], [s * 0.32, -0.02, 0.0], [s * 0.34, -0.17, 0.0]], 0.06, 0.044, C.hairHi, head, 24);
       strand([[s * 0.08, 0.48, -0.05], [s * 0.22, 0.42, -0.06], [s * 0.3, 0.3, -0.08], [s * 0.31, 0.1, -0.1], [s * 0.31, -0.05, -0.12], [s * 0.33, -0.19, -0.12]], 0.07, 0.05, C.hair, head, 24);
     }
-    // back sheet of hair
     for (const x of [-0.2, -0.1, 0, 0.1, 0.2]) {
       strand([[x * 0.9, 0.45, -0.17], [x * 1.05, 0.3, -0.26], [x * 1.15, 0.1, -0.25], [x * 1.2, -0.05, -0.22], [x * 1.25, -0.18, -0.2]], 0.085, 0.06, C.hair, head, 18);
     }
-  } else {
-    // voluminous swept-up top
+  } else if (isFemale && v === 2) {
+    // Female 2: Caramel-brown center-parted wavy hair swept into low side ponytail + loose tendrils
+    for (const s of [-1, 1]) {
+      const lobe = mesh(new THREE.SphereGeometry(0.18, 22, 16), C.hair, head, s * 0.105, 0.43, 0.04, 0.45);
+      lobe.scale.set(1.15, 0.65, 1.18);
+      lobe.rotation.z = -s * 0.22;
+      // Voluminous wavy temple sweeps curving back
+      strand([[s * 0.02, 0.50, 0.15], [s * 0.15, 0.46, 0.22], [s * 0.27, 0.37, 0.16], [s * 0.33, 0.28, 0.06], [s * 0.26, 0.20, -0.08]], 0.062, 0.042, C.hairHi, head, 20);
+      strand([[s * 0.05, 0.49, 0.08], [s * 0.22, 0.43, 0.12], [s * 0.31, 0.32, 0.02], [s * 0.25, 0.18, -0.12]], 0.068, 0.048, C.hair, head, 18);
+      // Delicate wavy face-framing tendril hanging past cheeks
+      strand([[s * 0.24, 0.34, 0.16], [s * 0.255, 0.23, 0.15], [s * 0.23, 0.13, 0.14], [s * 0.25, 0.04, 0.13]], 0.024, 0.01, C.hairHi, head, 14);
+    }
+    // Back gathered crown + Low side ponytail draped over her left shoulder (x > 0)
+    strand([[0.0, 0.36, -0.22], [0.06, 0.22, -0.22], [0.11, 0.10, -0.14], [0.14, 0.01, -0.03], [0.15, -0.08, 0.05]], 0.082, 0.045, C.hair, head, 20);
+    strand([[0.04, 0.20, -0.18], [0.12, 0.09, -0.10], [0.16, -0.01, 0.0], [0.16, -0.11, 0.07]], 0.06, 0.028, C.hairHi, head, 16);
+    const tie = mesh(new THREE.TorusGeometry(0.055, 0.01, 8, 16), '#3b281e', head, 0.10, 0.11, -0.13, 0.5);
+    tie.rotation.set(0.6, 0.3, -0.4);
+  } else if (isFemale && v === 3) {
+    // Female 3: Chocolate-brown wavy shoulder-length hair with curled ends + Pastel pink cap/beret on top
+    for (const s of [-1, 1]) {
+      const lobe = mesh(new THREE.SphereGeometry(0.175, 20, 16), C.hair, head, s * 0.1, 0.42, 0.05, 0.45);
+      lobe.scale.set(1.12, 0.62, 1.15);
+      lobe.rotation.z = -s * 0.2;
+      // Wavy shoulder-length locks with bouncy curled ends
+      strand([[s * 0.02, 0.49, 0.16], [s * 0.14, 0.45, 0.22], [s * 0.25, 0.34, 0.16], [s * 0.29, 0.20, 0.10], [s * 0.33, 0.06, 0.08], [s * 0.30, -0.05, 0.11], [s * 0.25, -0.07, 0.13]], 0.058, 0.038, C.hair, head, 24);
+      strand([[s * 0.06, 0.49, 0.08], [s * 0.21, 0.43, 0.11], [s * 0.30, 0.30, 0.05], [s * 0.33, 0.14, 0.02], [s * 0.35, -0.01, 0.02], [s * 0.29, -0.08, 0.05]], 0.064, 0.044, C.hairHi, head, 22);
+    }
+    for (const x of [-0.18, -0.09, 0, 0.09, 0.18]) {
+      strand([[x * 0.9, 0.44, -0.16], [x * 1.05, 0.28, -0.24], [x * 1.15, 0.10, -0.23], [x * 1.18, -0.04, -0.20]], 0.08, 0.055, C.hair, head, 16);
+    }
+    // Cute pastel coral-pink cap/beret perched on top of crown
+    const hatDome = mesh(new THREE.SphereGeometry(0.235, 28, 20), C.hat, head, 0, 0.455, -0.01, 0.52);
+    hatDome.scale.set(1.08, 0.48, 1.06);
+    hatDome.rotation.x = -0.18;
+    const hatBrim = mesh(new THREE.TorusGeometry(0.215, 0.026, 12, 26, Math.PI * 0.85), C.hatShade, head, 0, 0.455, 0.045, 0.52);
+    hatBrim.rotation.set(Math.PI / 2 - 0.36, 0, Math.PI * 0.075);
+    hatBrim.scale.set(1.05, 0.85, 0.75);
+  } else if (!isFemale && v === 1) {
+    // Male 1 (Existing): Swept side-parted chestnut hair
     const top = mesh(new THREE.SphereGeometry(0.2, 22, 16), C.hair, head, 0.02, 0.43, 0.04, 0.45);
     top.scale.set(1.3, 0.62, 1.2);
-    // side-parted fringe sweeping across the forehead
     strand([[-0.08, 0.5, 0.1], [0.04, 0.47, 0.2], [0.15, 0.4, 0.24], [0.23, 0.31, 0.2]], 0.06, 0.025, C.hair, head, 18);
     strand([[-0.1, 0.47, 0.16], [-0.01, 0.41, 0.245], [0.09, 0.35, 0.26], [0.14, 0.31, 0.25]], 0.05, 0.02, C.hairHi, head, 16);
     strand([[-0.12, 0.46, 0.15], [-0.1, 0.4, 0.23], [-0.06, 0.34, 0.255]], 0.045, 0.02, C.hair, head, 12);
     strand([[-0.1, 0.48, 0.08], [-0.2, 0.42, 0.14], [-0.26, 0.32, 0.13], [-0.27, 0.24, 0.1]], 0.055, 0.025, C.hairHi, head, 16);
     for (const s of [-1, 1]) {
-      // sideburns
       strand([[s * 0.22, 0.4, 0.1], [s * 0.28, 0.3, 0.08], [s * 0.27, 0.21, 0.06]], 0.045, 0.022, C.hair, head, 12);
-      // back volume
       strand([[s * -0.05, 0.52, -0.02], [s * 0.12, 0.48, -0.12], [s * 0.2, 0.38, -0.18], [s * 0.22, 0.26, -0.18]], 0.07, 0.04, C.hair, head, 14);
     }
-    // little crown flick
     strand([[0.0, 0.53, 0.0], [0.06, 0.565, -0.06], [0.1, 0.55, -0.1]], 0.045, 0.015, C.hairHi, head, 10);
+  } else if (!isFemale && v === 2) {
+    // Male 2: Voluminous feathery windswept medium-brown hair with caramel highlights
+    const top = mesh(new THREE.SphereGeometry(0.215, 22, 16), C.hair, head, 0.0, 0.44, 0.03, 0.45);
+    top.scale.set(1.38, 0.66, 1.22);
+    // Swooping feathered bangs & highlighted locks
+    strand([[0.08, 0.52, 0.08], [0.02, 0.50, 0.20], [-0.08, 0.42, 0.25], [-0.18, 0.35, 0.22]], 0.065, 0.022, C.hairHi, head, 18);
+    strand([[0.12, 0.50, 0.12], [0.08, 0.45, 0.23], [0.0, 0.36, 0.26], [-0.05, 0.31, 0.25]], 0.058, 0.018, C.hair, head, 16);
+    strand([[-0.04, 0.53, 0.06], [-0.16, 0.48, 0.18], [-0.28, 0.41, 0.17], [-0.35, 0.36, 0.13]], 0.062, 0.018, C.hairHi, head, 16);
+    strand([[0.08, 0.51, 0.08], [0.20, 0.46, 0.17], [0.30, 0.39, 0.14], [0.36, 0.35, 0.10]], 0.06, 0.018, C.hair, head, 16);
+    // Feathery side wings sticking out playfully
+    for (const s of [-1, 1]) {
+      strand([[s * 0.18, 0.42, 0.10], [s * 0.29, 0.34, 0.09], [s * 0.34, 0.29, 0.06]], 0.05, 0.016, C.hairHi, head, 12);
+      strand([[s * 0.20, 0.34, 0.06], [s * 0.29, 0.26, 0.04], [s * 0.31, 0.20, 0.03]], 0.042, 0.014, C.hair, head, 12);
+      strand([[s * -0.04, 0.53, -0.02], [s * 0.14, 0.49, -0.12], [s * 0.23, 0.38, -0.18], [s * 0.24, 0.25, -0.17]], 0.072, 0.038, C.hair, head, 14);
+    }
+    // Top wispy flyaways
+    strand([[0.04, 0.53, 0.02], [-0.04, 0.58, 0.0], [-0.12, 0.57, -0.03]], 0.042, 0.012, C.hairHi, head, 10);
+  } else if (!isFemale && v === 3) {
+    // Male 3: Jet-black short spiky/swept-up hair with clean tapered sides & open forehead
+    const top = mesh(new THREE.SphereGeometry(0.19, 20, 14), C.hair, head, 0.0, 0.43, 0.02, 0.42);
+    top.scale.set(1.22, 0.58, 1.15);
+    // Spiky upward & swept front tufts exposing the forehead
+    strand([[0.04, 0.46, 0.14], [0.0, 0.53, 0.19], [-0.06, 0.58, 0.16]], 0.058, 0.014, C.hair, head, 14);
+    strand([[-0.06, 0.45, 0.13], [-0.11, 0.52, 0.18], [-0.17, 0.55, 0.14]], 0.054, 0.014, C.hairHi, head, 14);
+    strand([[0.11, 0.45, 0.12], [0.09, 0.52, 0.17], [0.04, 0.56, 0.14]], 0.054, 0.014, C.hairHi, head, 14);
+    strand([[0.17, 0.42, 0.09], [0.19, 0.48, 0.13], [0.15, 0.52, 0.10]], 0.046, 0.012, C.hair, head, 12);
+    strand([[-0.15, 0.42, 0.10], [-0.20, 0.47, 0.13], [-0.23, 0.49, 0.09]], 0.046, 0.012, C.hair, head, 12);
+    strand([[0.0, 0.48, 0.02], [-0.04, 0.56, -0.02], [-0.09, 0.59, -0.06]], 0.055, 0.014, C.hair, head, 12);
+    // Clean tapered sideburns
+    for (const s of [-1, 1]) {
+      strand([[s * 0.23, 0.39, 0.08], [s * 0.27, 0.30, 0.06], [s * 0.26, 0.22, 0.05]], 0.038, 0.015, C.hair, head, 10);
+      strand([[s * -0.04, 0.50, -0.03], [s * 0.12, 0.46, -0.13], [s * 0.19, 0.36, -0.18], [s * 0.20, 0.25, -0.17]], 0.065, 0.035, C.hair, head, 12);
+    }
   }
 
-  // ---- Arms: full jacket sleeves, cuffs & hands ----
+  // ---- Arms: sleeves, cuffs & hands ----
+  const isShortSleeve = (!isFemale && v === 3);
+  const isRolledSleeve = (!isFemale && v === 2) || (isFemale && v === 2);
   const arm = (side) => {
     const s = side === 'L' ? 1 : -1;
     const a = group(`me_arm${side}`, torso, s * 0.175, 0.27, 0);
     mesh(new THREE.SphereGeometry(0.054, 14, 12), C.top, a, 0, -0.01, 0, 0.66);
-    mesh(new THREE.CylinderGeometry(0.048, 0.045, 0.16, 14), C.top, a, 0, -0.09, 0, 0.66);
+    if (isShortSleeve) {
+      // Short sleeve polo on upper arm + bare lower upper-arm
+      mesh(new THREE.CylinderGeometry(0.049, 0.047, 0.10, 14), C.top, a, 0, -0.06, 0, 0.62);
+      const sCuff = mesh(new THREE.TorusGeometry(0.044, 0.009, 8, 16), C.topShade, a, 0, -0.11, 0, 0.62);
+      sCuff.rotation.x = Math.PI / 2;
+      mesh(new THREE.CylinderGeometry(0.042, 0.039, 0.06, 14), C.skin, a, 0, -0.14, 0, 0.55);
+    } else {
+      mesh(new THREE.CylinderGeometry(0.048, 0.045, 0.16, 14), C.top, a, 0, -0.09, 0, 0.66);
+    }
 
     const f = group(`me_fore${side}`, a, 0, -0.16, 0);
-    mesh(new THREE.CylinderGeometry(0.045, 0.042, 0.11, 14), C.top, f, 0, -0.055, 0, 0.66);
-    const cuff = mesh(new THREE.TorusGeometry(0.041, 0.012, 10, 16), C.topShade, f, 0, -0.112, 0, 0.66);
-    cuff.rotation.x = Math.PI / 2;
-    mesh(new THREE.CylinderGeometry(0.031, 0.03, 0.04, 12), C.skin, f, 0, -0.135, 0, 0.55);
+    if (isShortSleeve) {
+      // Bare forearm
+      mesh(new THREE.CylinderGeometry(0.039, 0.032, 0.15, 14), C.skin, f, 0, -0.075, 0, 0.55);
+    } else if (isRolledSleeve) {
+      // 3/4 rolled sleeve
+      mesh(new THREE.CylinderGeometry(0.045, 0.043, 0.065, 14), C.top, f, 0, -0.032, 0, 0.66);
+      const cuff = mesh(new THREE.TorusGeometry(0.043, 0.012, 10, 16), C.topShade, f, 0, -0.068, 0, 0.66);
+      cuff.rotation.x = Math.PI / 2;
+      mesh(new THREE.CylinderGeometry(0.035, 0.031, 0.085, 12), C.skin, f, 0, -0.112, 0, 0.55);
+    } else {
+      // Full-length jacket sleeve
+      mesh(new THREE.CylinderGeometry(0.045, 0.042, 0.11, 14), C.top, f, 0, -0.055, 0, 0.66);
+      const cuff = mesh(new THREE.TorusGeometry(0.041, 0.012, 10, 16), C.topShade, f, 0, -0.112, 0, 0.66);
+      cuff.rotation.x = Math.PI / 2;
+      mesh(new THREE.CylinderGeometry(0.031, 0.03, 0.04, 12), C.skin, f, 0, -0.135, 0, 0.55);
+    }
     const hand = mesh(new THREE.SphereGeometry(0.040, 14, 12), C.skin, f, 0, -0.175, 0.005, 0.55);
     hand.scale.set(0.95, 1.1, 0.78);
     mesh(new THREE.SphereGeometry(0.016, 8, 8), C.skin, f, -s * 0.028, -0.165, 0.02, 0.55);
@@ -432,17 +677,26 @@ export function buildMe(disposables, { gender = 'male', halfBody = false } = {})
   const foreL = arm('L');
   const foreR = arm('R');
 
-  // ---- Legs: overalls / rolled jeans & sneakers ----
+  // ---- Legs: trousers / rolled jeans / skirt legs & shoes ----
   const leg = (side) => {
     const s = side === 'L' ? 1 : -1;
     const l = group(`me_leg${side}`, hips, s * 0.085, 0, 0);
-    mesh(new THREE.CylinderGeometry(0.062, 0.056, 0.24, 16), C.bottom, l, 0, -0.12, 0, 0.7);
+    const isSkirtLegs = (isFemale && v === 3);
+    mesh(new THREE.CylinderGeometry(0.062, 0.056, 0.24, 16), isSkirtLegs ? C.skin : C.bottom, l, 0, -0.12, 0, isSkirtLegs ? 0.55 : 0.7);
     const sh = group(`me_shin${side}`, l, 0, -0.24, 0);
-    mesh(new THREE.CylinderGeometry(0.054, 0.05, isFemale ? 0.19 : 0.21, 16), C.bottom, sh, 0, isFemale ? -0.095 : -0.105, 0, 0.7);
-    if (isFemale) {
+    if (isSkirtLegs) {
+      // Bare lower legs + white ankle socks
+      mesh(new THREE.CylinderGeometry(0.050, 0.042, 0.17, 16), C.skin, sh, 0, -0.085, 0, 0.55);
+      mesh(new THREE.CylinderGeometry(0.044, 0.044, 0.055, 14), C.cuff, sh, 0, -0.195, 0, 0.65);
+    } else if ((isFemale && v === 1) || (!isFemale && v === 3)) {
+      // Rolled denim cuffs
+      mesh(new THREE.CylinderGeometry(0.054, 0.05, 0.19, 16), C.bottom, sh, 0, -0.095, 0, 0.7);
       const cuff = mesh(new THREE.TorusGeometry(0.05, 0.014, 10, 18), C.cuff, sh, 0, -0.188, 0, 0.7);
       cuff.rotation.x = Math.PI / 2;
       mesh(new THREE.CylinderGeometry(0.036, 0.036, 0.03, 12), C.skin, sh, 0, -0.212, 0, 0.55);
+    } else {
+      // Full-length trousers
+      mesh(new THREE.CylinderGeometry(0.054, 0.05, 0.21, 16), C.bottom, sh, 0, -0.105, 0, 0.7);
     }
     const shoe = mesh(new THREE.SphereGeometry(0.06, 16, 12), C.shoe, sh, 0, -0.245, 0.025, 0.55);
     shoe.scale.set(0.95, 0.7, 1.4);
@@ -669,7 +923,7 @@ const wrapAngle = (a) => Math.atan2(Math.sin(a), Math.cos(a));
  * @param {[number,number]} o.start
  * @param {(state:string, info:object)=>void} [o.onState]
  */
-export function createMe({ scene, nav, groundY, start, startFace = Math.PI * 0.75, onState, name = 'ME', gender = 'male' }) {
+export function createMe({ scene, nav, groundY, start, startFace = Math.PI * 0.75, onState, name = 'ME', gender = 'male', variant = 1 }) {
   const disposables = [];
   const SCALE = 0.9, SPEED = 3.6;
   const root = new THREE.Group(); root.name = 'me_root';
@@ -677,6 +931,7 @@ export function createMe({ scene, nav, groundY, start, startFace = Math.PI * 0.7
   scene.add(root);
 
   let currentGender = (gender === 'female' ? 'female' : 'male');
+  let currentVariant = (variant === 2 || variant === 3) ? variant : 1;
   let bodyDisposables = [];
   let props = null;
   let mixer = null;
@@ -695,19 +950,20 @@ export function createMe({ scene, nav, groundY, start, startFace = Math.PI * 0.7
     current = next;
   }
 
-  function setupBody(g) {
+  function setupBody(g, v = currentVariant) {
     const prevClip = current ? current.getClip().name : 'idle';
     const prevTime = current ? current.time : 0;
     const wasHoldingPole = props?.hookPole?.visible ?? false;
     const wasBowlVisible = props?.bowl?.visible ?? false;
     currentGender = g;
+    currentVariant = (v === 2 || v === 3) ? v : 1;
 
     bodyDisposables.forEach(o => o?.dispose?.());
     bodyDisposables = [];
     while (root.children.length > 0) {
       root.remove(root.children[0]);
     }
-    const built = buildMe(bodyDisposables, { gender: g });
+    const built = buildMe(bodyDisposables, { gender: currentGender, variant: currentVariant });
     root.add(built.body);
     props = built.props;
     if (props.hookPole) props.hookPole.visible = wasHoldingPole;
@@ -723,7 +979,7 @@ export function createMe({ scene, nav, groundY, start, startFace = Math.PI * 0.7
     play(prevClip, 0, prevTime);
   }
 
-  setupBody(currentGender);
+  setupBody(currentGender, currentVariant);
 
   // ground markers
   const ringMat = new THREE.MeshBasicMaterial({ color: '#ff9f43', transparent: true, opacity: 0.85, depthWrite: false });
@@ -748,10 +1004,11 @@ export function createMe({ scene, nav, groundY, start, startFace = Math.PI * 0.7
     chip.material.needsUpdate = true;
   }
 
-  function setGender(nextGender) {
-    const clean = (nextGender === 'female' ? 'female' : 'male');
-    if (clean === currentGender) return;
-    setupBody(clean);
+  function setGender(nextGender, nextVariant = currentVariant) {
+    const cleanG = (nextGender === 'female' ? 'female' : 'male');
+    const cleanV = (nextVariant === 2 || nextVariant === 3) ? nextVariant : 1;
+    if (cleanG === currentGender && cleanV === currentVariant) return;
+    setupBody(cleanG, cleanV);
   }
 
   const bubbleTex = {};

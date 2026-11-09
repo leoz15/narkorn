@@ -1265,6 +1265,7 @@ export async function render(el) {
     onState: showStatus,
     name: myTicket?.fullName || 'ME',
     gender: myTicket?.gender || 'male',
+    variant: myTicket?.avatarVariant || 1,
   });
   showStatus(ME_STATE.IDLE);
 
@@ -1666,7 +1667,7 @@ export async function render(el) {
   const applyStats = async () => {
     const latestTicket = await getMyTicket();
     me.setName(latestTicket?.fullName || 'ME');
-    me.setGender?.(latestTicket?.gender || 'male');
+    me.setGender?.(latestTicket?.gender || 'male', latestTicket?.avatarVariant || 1);
   };
   applyStats();
   const offStats = onStats(applyStats);
