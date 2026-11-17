@@ -9,7 +9,7 @@ let activeAvatarHandle = null;
 export function mountTicketAvatar(canvas, gender = 'male', variant = 1) {
   if (!canvas) return null;
   if (activeAvatarHandle) {
-    try { activeAvatarHandle.destroy(); } catch (_) {}
+    try { activeAvatarHandle.destroy(); } catch (_) { }
     activeAvatarHandle = null;
   }
 
@@ -100,9 +100,9 @@ export async function ticketCard(t) {
   return `
   <article class="ticket" id="ticket-card">
     <div class="ticket-head">
-      <small style="letter-spacing:.18em;font-size:12px">22 พฤศจิกาขอลาบวช</small>
-      <h2 style="font-size:28px;margin-top:2px">ธนกร วงศ์คำภู</h2>
-      <div style="font-size:13px;opacity:.95;margin-top:4px">📅 ${EVENT.dateTh}</div>
+      <small style="letter-spacing:.12em;font-size:12px;opacity:.95">บัตรผู้ร่วมงาน</small>
+      <h2 style="font-size:clamp(18px, 5.2vw, 24px);margin:3px 0 2px;line-height:1.3;word-break:keep-all">ยินดีต้อนรับสู่งานบวชมังกร</h2>
+      <div style="font-size:clamp(11.5px, 3.2vw, 13px);opacity:.95;margin-top:2px;line-height:1.4;word-break:keep-all">พร้อมสิทธิ์ร่วมกิจกรรมพิเศษภายในงาน</div>
     </div>
     <div class="ticket-body">
       <div class="ticket-emblem">
@@ -142,9 +142,9 @@ export async function ticketImage(t) {
   g.save(); roundRect(g, 60, 60, W - 120, 240, 40, true); g.clip();
   const grd = g.createLinearGradient(60, 60, W - 60, 300); grd.addColorStop(0, '#e8913a'); grd.addColorStop(1, '#d4a24c');
   g.fillStyle = grd; g.fillRect(60, 60, W - 120, 240); g.restore();
-  g.fillStyle = '#fff'; g.font = '500 22px Prompt'; g.fillText('22 พฤศจิกาขอลาบวช', 110, 130);
-  g.font = '700 48px Mali'; g.fillText('ธนกร วงศ์คำภู', 110, 205);
-  g.font = '400 22px Prompt'; g.fillText('📅 ' + EVENT.dateTh, 110, 255);
+  g.fillStyle = '#fff'; g.font = '500 22px Prompt'; g.fillText('บัตรผู้ร่วมงาน', 110, 130);
+  g.font = '700 38px Mali'; g.fillText('ยินดีต้อนรับสู่งานบวชมังกร', 110, 195);
+  g.font = '400 20px Prompt'; g.fillText('พร้อมสิทธิ์ร่วมกิจกรรมพิเศษภายในงาน', 110, 245);
 
   // Center emblem ring
   const cy = 410;

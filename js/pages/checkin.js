@@ -24,22 +24,11 @@ export async function render(el, params = {}) {
     if (activeTab === 'ticket' && currentTicket) {
       el.innerHTML = `
       <section class="page container">
-        <div class="checkin-head" style="text-align:center;max-width:600px;margin:0 auto 28px">
-          <h1 style="font-family:var(--hand);font-size:clamp(34px, 5vw, 48px);margin:6px 0 10px">บัตรผู้ร่วมงาน</h1>
-          <p style="color:var(--cocoa-2);font-size:15px;margin:0">
-            ยินดีต้อนรับสู่งานบวชมังกร<br class="show-mobile" />พร้อมสิทธิ์ร่วมกิจกรรมพิเศษภายในงาน
-          </p>
-        </div>
-
         <div id="checkin-ticket-wrap">
           ${await ticketCard(currentTicket)}
         </div>
 
-        <div class="ticket-actions" style="margin-top:24px">
-          <button class="btn btn-rose btn-lg" id="btn-save-ticket">⬇️ บันทึกบัตรลงเครื่อง</button>
-        </div>
-
-        <div class="card glass ticket-gender-box" style="max-width:460px;margin:18px auto 0;display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-radius:18px">
+        <div class="card glass ticket-gender-box" style="max-width:460px;margin:20px auto 0;display:flex;align-items:center;justify-content:space-between;padding:12px 18px;border-radius:18px">
           <div style="text-align:left">
             <strong style="font-size:13.5px;color:var(--cocoa);display:block">เพศตัวละครในแผนที่ 3D</strong>
             <span style="font-size:12px;color:var(--cocoa-2)">แตะเปลี่ยนเพศตัวละครของคุณได้ตลอดเวลา</span>
@@ -48,6 +37,10 @@ export async function render(el, params = {}) {
             <button type="button" class="btn btn-sm ${currentTicket.gender !== 'female' ? 'btn-primary' : 'btn-ghost'}" id="btn-toggle-male">👦 ชาย</button>
             <button type="button" class="btn btn-sm ${currentTicket.gender === 'female' ? 'btn-primary' : 'btn-ghost'}" id="btn-toggle-female">👧 หญิง</button>
           </div>
+        </div>
+
+        <div class="ticket-actions" style="margin-top:18px">
+          <button class="btn btn-rose btn-lg" id="btn-save-ticket">⬇️ บันทึกบัตรลงเครื่อง</button>
         </div>
       </section>
       ${footer()}`;
