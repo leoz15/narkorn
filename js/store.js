@@ -201,6 +201,42 @@ function audit(action, data = {}) {
   write(KEY.audit, log.slice(0, 500));
 }
 
+async function syncVisitorIncrementToCloud(fallbackCount) {
+  try {
+    const fs = await getFirestoreModule();
+    if (!fs?.db) return;
+    const ref = fs.doc(fs.db, 'settings', 'visitors');
+    if (typeof fs.increment === 'function') {
+      await fs.setDoc(ref, { count: fs.increment(1), updatedAt: new Date().toISOString() }, { merge: true });
+    } else {
+      const snap = await fs.getDoc(ref);
+      const cur = snap.exists() ? (Number(snap.data()?.count) || 0) : 0;
+      await fs.setDoc(ref, { count: Math.max(cur + 1, fallbackCount), updatedAt: new Date().toISOString() }, { merge: true });
+    }
+  } catch (e) {}
+}
+
+async function initVisitorsCloudSync() {
+  if (typeof window === 'undefined') return;
+  try {
+    const fs = await getFirestoreModule();
+    if (!fs?.db) return;
+    fs.onSnapshot(fs.doc(fs.db, 'settings', 'visitors'), snap => {
+      if (snap.exists()) {
+        const remoteCount = Number(snap.data()?.count) || 0;
+        const localCount = Number(read(KEY.visitors, 0)) || 0;
+        if (remoteCount > 0 && remoteCount !== localCount) {
+          write(KEY.visitors, remoteCount);
+          emit();
+        }
+      }
+    }, () => {});
+  } catch (e) {}
+}
+if (typeof window !== 'undefined') {
+  initVisitorsCloudSync();
+}
+
 export function recordVisit() {
   try {
     const sessionKey = 'mf_session_counted';
@@ -210,6 +246,7 @@ export function recordVisit() {
       const next = cur + 1;
       write(KEY.visitors, next);
       emit();
+      syncVisitorIncrementToCloud(next);
       return next;
     }
   } catch { }
@@ -426,20 +463,26 @@ export async function registerGuest({
   }
   if (!isOnsite && !consent) throw new ApiError('VALIDATION', 'กรุณายอมรับเงื่อนไขการใช้ข้อมูล');
 
-  // Check duplicate in Firestore if cloud is ready
+  // Sync latest registrations from Firestore to check duplicate phone AND ensure nextRegId() never collides across devices
   try {
     const fs = await getFirestoreModule();
-    if (fs?.db && tel) {
-      const q = fs.query(fs.collection(fs.db, 'registrations'), fs.where('phone', '==', tel));
-      const snap = await fs.getDocs(q);
-      if (!snap.empty) {
-        const existing = snap.docs.map(d => d.data()).find(d => d && d.status !== 'cancelled');
+    if (fs?.db) {
+      const snap = await fs.getDocs(fs.collection(fs.db, 'registrations'));
+      const cloudRegs = [];
+      snap.forEach(d => {
+        const data = d.data();
+        if (data && data.id) cloudRegs.push(data);
+      });
+      if (cloudRegs.length > 0) {
+        const localRegs = read(KEY.regs, []);
+        const pendingUploads = localRegs.filter(r => r && r.syncPending && !cloudRegs.some(c => c.id === r.id));
+        const allRegs = [...cloudRegs, ...pendingUploads];
+        allRegs.sort((a, b) => (a.createdAt || '').localeCompare(b.createdAt || ''));
+        write(KEY.regs, allRegs);
+      }
+      if (tel) {
+        const existing = cloudRegs.find(d => d && d.phone === tel && d.status !== 'cancelled');
         if (existing) {
-          const regs = read(KEY.regs, []);
-          if (!regs.some(r => r.id === existing.id)) {
-            regs.push(existing);
-            write(KEY.regs, regs);
-          }
           throw new ApiError('DUPLICATE', 'เบอร์นี้ลงทะเบียนไว้แล้ว', publicView(existing));
         }
       }
@@ -693,12 +736,71 @@ export async function getStats() { await delay(100); return computeStats(); }
 export function onStats(fn) { listeners.add(fn); return () => listeners.delete(fn); }
 
 /* ---------------- My ticket (device) ---------------- */
-export const saveMyTicket = t => write(KEY.myTicket, { id: t.id, token: t.token });
-export const getMyTicketRef = () => read(KEY.myTicket, null);
-export const clearMyTicket = () => localStorage.removeItem(KEY.myTicket);
+const TICKET_COOKIE = 'mf_ticket_ref';
+function writeTicketCookie(val) {
+  if (typeof document === 'undefined') return;
+  try {
+    document.cookie = `${TICKET_COOKIE}=${encodeURIComponent(JSON.stringify(val))}; path=/; max-age=31536000; SameSite=Lax`;
+  } catch (e) {}
+}
+function readTicketCookie() {
+  if (typeof document === 'undefined') return null;
+  try {
+    const m = document.cookie.match(new RegExp('(?:^|; )' + TICKET_COOKIE + '=([^;]*)'));
+    return m ? JSON.parse(decodeURIComponent(m[1])) : null;
+  } catch (e) { return null; }
+}
+function clearTicketCookie() {
+  if (typeof document === 'undefined') return;
+  try {
+    document.cookie = `${TICKET_COOKIE}=; path=/; max-age=0; SameSite=Lax`;
+  } catch (e) {}
+}
+
+export const saveMyTicket = t => {
+  const ref = { id: t.id, token: t.token, phone: t.phone || '' };
+  write(KEY.myTicket, ref);
+  writeTicketCookie(ref);
+};
+export const getMyTicketRef = () => {
+  const local = read(KEY.myTicket, null);
+  if (local && local.token) return local;
+  const cookieRef = readTicketCookie();
+  if (cookieRef && cookieRef.token) {
+    write(KEY.myTicket, cookieRef);
+    return cookieRef;
+  }
+  return null;
+};
+export const clearMyTicket = () => {
+  localStorage.removeItem(KEY.myTicket);
+  clearTicketCookie();
+};
 export async function getMyTicket() {
   const ref = getMyTicketRef();
-  return ref ? getByToken(ref.token) : null;
+  if (!ref) return null;
+  let ticket = await getByToken(ref.token);
+  if (!ticket && ref.id) {
+    try {
+      const fs = await getFirestoreModule();
+      if (fs?.db) {
+        const snap = await fs.getDoc(fs.doc(fs.db, 'registrations', ref.id));
+        if (snap.exists()) {
+          const found = snap.data();
+          if (found && found.status !== 'cancelled') {
+            const regs = read(KEY.regs, []);
+            if (!regs.some(x => x.id === found.id)) {
+              regs.push(found);
+              write(KEY.regs, regs);
+              emit();
+            }
+            ticket = publicView(found);
+          }
+        }
+      }
+    } catch (e) {}
+  }
+  return ticket;
 }
 export function updateMyTicketGender(gender) {
   const ref = getMyTicketRef();
@@ -706,12 +808,13 @@ export function updateMyTicketGender(gender) {
   const g = gender === 'female' ? 'female' : 'male';
   const regs = read(KEY.regs, []);
   const idx = regs.findIndex(r => r.id === ref.id || r.token === ref.token);
+  const targetId = idx >= 0 ? regs[idx].id : ref.id;
   if (idx >= 0) {
     regs[idx].gender = g;
     write(KEY.regs, regs);
-    if (regs[idx].id) {
-      updateRegistrationInCloud(regs[idx].id, { gender: g });
-    }
+  }
+  if (targetId) {
+    updateRegistrationInCloud(targetId, { gender: g });
   }
   emit();
   return g;
@@ -772,8 +875,15 @@ function claimCode(existing) {
   while (existing.has(c));
   return c;
 }
-function nextPlayId() {
-  const n = (read(KEY.lsSeq, 0) || 0) + 1;
+function nextPlayId(plays = readPlays()) {
+  let maxNum = read(KEY.lsSeq, 0) || 0;
+  for (const p of plays) {
+    if (p.id && p.id.startsWith('LS-')) {
+      const num = parseInt(p.id.slice(3), 10);
+      if (!isNaN(num) && num > maxNum) maxNum = num;
+    }
+  }
+  const n = maxNum + 1;
   write(KEY.lsSeq, n);
   return 'LS-' + String(n).padStart(4, '0');
 }
@@ -822,6 +932,40 @@ async function initLuckyPlaysCloudSync() {
 }
 if (typeof window !== 'undefined') {
   initLuckyPlaysCloudSync();
+}
+
+async function syncLuckyPrizesToCloud(prizes) {
+  try {
+    const fs = await getFirestoreModule();
+    if (!fs || !fs.db) return;
+    await fs.setDoc(fs.doc(fs.db, 'settings', 'luckyPrizes'), {
+      items: prizes,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (e) {}
+}
+
+async function initLuckyPrizesCloudSync() {
+  if (typeof window === 'undefined') return;
+  try {
+    const fs = await getFirestoreModule();
+    if (!fs || !fs.db) return;
+    fs.onSnapshot(fs.doc(fs.db, 'settings', 'luckyPrizes'), snap => {
+      if (snap.exists()) {
+        const remote = snap.data();
+        if (remote && Array.isArray(remote.items)) {
+          const current = read(KEY.lsPrizes, null);
+          if (JSON.stringify(remote.items) !== JSON.stringify(current)) {
+            write(KEY.lsPrizes, remote.items);
+            emit();
+          }
+        }
+      }
+    }, () => {});
+  } catch (e) {}
+}
+if (typeof window !== 'undefined') {
+  initLuckyPrizesCloudSync();
 }
 
 async function syncLuckyConfigToCloud(cfg) {
@@ -1014,6 +1158,7 @@ export async function savePrize(input, staff = 'staff') {
   catch { throw new ApiError('STORAGE', 'พื้นที่จัดเก็บเต็ม กรุณาใช้รูปภาพขนาดเล็กลง หรือใช้อีโมจิแทน'); }
   audit(idx >= 0 ? 'lucky.prize.update' : 'lucky.prize.create', { staff, id: prize.id, qty });
   emit();
+  await syncLuckyPrizesToCloud(prizes);
   return prize;
 }
 
@@ -1021,9 +1166,11 @@ export async function deletePrize(id, staff = 'staff') {
   await delay(100);
   const awarded = readPlays().filter(x => x.prizeId === id).length;
   if (awarded > 0) throw new ApiError('IN_USE', `รางวัลนี้มีผู้ได้รับแล้ว ${awarded} คน ไม่สามารถลบได้ (ปรับจำนวนแทนได้)`);
-  write(KEY.lsPrizes, readPrizes().filter(p => p.id !== id));
+  const next = readPrizes().filter(p => p.id !== id);
+  write(KEY.lsPrizes, next);
   audit('lucky.prize.delete', { staff, id });
   emit();
+  await syncLuckyPrizesToCloud(next);
   return true;
 }
 
@@ -1059,9 +1206,31 @@ function playView(p, prizes) {
 /** Lucky Star result for a registration token (null = not played yet). */
 export async function getLuckyPlay(regToken) {
   await delay(60);
-  const reg = read(KEY.regs, []).find(r => r.token === regToken);
+  if (!regToken) return null;
+  let reg = read(KEY.regs, []).find(r => r.token === regToken);
+  if (!reg) {
+    reg = await getByToken(regToken);
+  }
   if (!reg) return null;
-  return playView(readPlays().find(p => p.regId === reg.id), readPrizes());
+  let play = readPlays().find(p => p.regId === reg.id);
+  if (!play) {
+    try {
+      const fs = await getFirestoreModule();
+      if (fs?.db) {
+        const q = fs.query(fs.collection(fs.db, 'luckyPlays'), fs.where('regId', '==', reg.id));
+        const snap = await fs.getDocs(q);
+        if (!snap.empty) {
+          play = snap.docs[0].data();
+          const plays = readPlays();
+          if (!plays.some(x => x.id === play.id)) {
+            plays.push(play);
+            write(KEY.lsPlays, plays);
+          }
+        }
+      }
+    } catch (e) {}
+  }
+  return playView(play, readPrizes());
 }
 
 /**
@@ -1071,10 +1240,44 @@ export async function getLuckyPlay(regToken) {
  */
 export async function playLuckyStar(regToken) {
   await delay(350);
-  return withLuckyLock(() => {
-    const regs = read(KEY.regs, []);
-    const reg = regs.find(r => r.token === regToken && r.status !== 'cancelled');
+  return withLuckyLock(async () => {
+    let regs = read(KEY.regs, []);
+    let reg = regs.find(r => r.token === regToken && r.status !== 'cancelled');
+    if (!reg && regToken) {
+      const cloudReg = await getByToken(regToken);
+      if (cloudReg) {
+        regs = read(KEY.regs, []);
+        reg = regs.find(r => r.id === cloudReg.id && r.status !== 'cancelled') || cloudReg;
+      }
+    }
     if (!reg) return { result: 'not_registered' };
+
+    // Sync latest plays, prizes, and config from Firestore before drawing so LS-xxxx IDs and prize stock never collide across devices
+    try {
+      const fs = await getFirestoreModule();
+      if (fs?.db) {
+        const [playsSnap, prizesSnap, cfgSnap] = await Promise.all([
+          fs.getDocs(fs.collection(fs.db, 'luckyPlays')),
+          fs.getDoc(fs.doc(fs.db, 'settings', 'luckyPrizes')),
+          fs.getDoc(fs.doc(fs.db, 'settings', 'luckyConfig')),
+        ]);
+        const cloudPlays = [];
+        playsSnap.forEach(d => {
+          const data = d.data();
+          if (data && data.id) cloudPlays.push(data);
+        });
+        if (cloudPlays.length > 0) {
+          cloudPlays.sort((a, b) => (a.playedAt || '').localeCompare(b.playedAt || ''));
+          write(KEY.lsPlays, cloudPlays);
+        }
+        if (prizesSnap.exists() && Array.isArray(prizesSnap.data()?.items)) {
+          write(KEY.lsPrizes, prizesSnap.data().items);
+        }
+        if (cfgSnap.exists() && cfgSnap.data()) {
+          write(KEY.lsConfig, { ...DEFAULT_LUCKY_CONFIG, ...cfgSnap.data() });
+        }
+      }
+    } catch (e) {}
 
     const prizes = readPrizes();
     const plays = readPlays();
@@ -1099,7 +1302,7 @@ export async function playLuckyStar(regToken) {
 
     const now = new Date().toISOString();
     const play = {
-      id: nextPlayId(),
+      id: nextPlayId(plays),
       regId: reg.id,
       fullName: reg.fullName,
       result: prize ? 'win' : 'none',
@@ -1118,7 +1321,7 @@ export async function playLuckyStar(regToken) {
     write(KEY.lsPlays, plays);
     audit('lucky.play', { id: play.id, regId: reg.id, result: play.result, prizeId: play.prizeId });
     emit();
-    syncPlayToCloud(play);
+    await syncPlayToCloud(play);
     if (reg.id) updateRegistrationInCloud(reg.id, { checkedInAt: reg.checkedInAt, checkedInBy: reg.checkedInBy });
     return { result: 'ok', play: playView(play, prizes) };
   });
@@ -1340,16 +1543,19 @@ export async function seedDemo(n = 40) {
 export async function resetAll(staff = 'staff') {
   // 1. Delete all Firestore cloud records
   try {
+    const fs = await getFirestoreModule();
     await Promise.all([
       clearCloudCollection('registrations'),
       clearCloudCollection('luckyPlays'),
+      fs?.db ? fs.setDoc(fs.doc(fs.db, 'settings', 'visitors'), { count: 0, updatedAt: new Date().toISOString() }) : Promise.resolve(),
     ]);
   } catch (e) {
     console.warn('Cloud collections clear warning:', e);
   }
 
-  // 2. Clear all local storage keys
+  // 2. Clear all local storage keys & cookie
   Object.values(KEY).forEach(k => localStorage.removeItem(k));
+  clearTicketCookie();
   try { sessionStorage.removeItem('mf_session_counted'); } catch { }
   audit('system.reset_all', { staff });
   emit();
