@@ -76,7 +76,7 @@ export async function render(el) {
         </h1>
 
         <!-- Countdown Bar -->
-        <div class="sched-countdown-wrap">
+        <div class="sched-countdown-wrap" id="sched-countdown-wrap">
           <div class="countdown-head">
             <span class="countdown-badge">
               <span class="dot live"></span> นับถอยหลังสู่วันงานมงคล
@@ -102,7 +102,7 @@ export async function render(el) {
           </div>
           <div class="invitation-card-foot">
             <div>
-              <strong>การ์ดเชิญฉบับสมบูรณ์</strong>
+              <strong>การ์ดเชิญ</strong>
               <p class="text-balance">สามารถแตะขยาย หรือบันทึกภาพเก็บไว้เป็นที่ระลึก</p>
             </div>
             <div class="invitation-btn-group">
@@ -236,6 +236,7 @@ export async function render(el) {
 
   // Countdown logic
   const targetTime = new Date(EVENT.date).getTime();
+  const countdownWrap = el.querySelector('#sched-countdown-wrap');
   const nums = el.querySelectorAll('#sched-countdown .num');
   const liveStatus = el.querySelector('#sched-live-status');
 
@@ -244,6 +245,7 @@ export async function render(el) {
     let diff = targetTime - now;
 
     if (diff > 0) {
+      if (countdownWrap) countdownWrap.style.display = '';
       const parts = [86400000, 3600000, 60000, 1000].map(unit => {
         const val = Math.floor(diff / unit);
         diff -= val * unit;
@@ -252,23 +254,25 @@ export async function render(el) {
       nums.forEach((n, i) => (n.textContent = String(parts[i]).padStart(2, '0')));
       if (liveStatus) liveStatus.textContent = 'รอเริ่มพิธี';
     } else {
-      nums.forEach(n => (n.textContent = '00'));
-      // Check current ritual
+      if (countdownWrap) countdownWrap.style.display = 'none';
+      // Highlight current ritual in timeline below
+      el.querySelectorAll('.timeline-item').forEach(item => {
+        item.classList.remove('live-active');
+        const badge = item.querySelector('.tl-status-live');
+        if (badge) badge.style.display = 'none';
+      });
       const current = sched.find(item => {
         const s = new Date(item.startTimeISO).getTime();
         const e = new Date(item.endTimeISO).getTime();
         return now >= s && now <= e;
       });
       if (current) {
-        if (liveStatus) liveStatus.textContent = `กำลังดำเนิน: ${current.title}`;
         const activeItem = el.querySelector(`#item-${current.id}`);
         if (activeItem) {
           activeItem.classList.add('live-active');
           const liveBadge = activeItem.querySelector('.tl-status-live');
           if (liveBadge) liveBadge.style.display = 'inline-flex';
         }
-      } else {
-        if (liveStatus) liveStatus.textContent = 'วันงานมงคลอุปสมบท';
       }
     }
   };
