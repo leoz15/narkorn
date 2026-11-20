@@ -93,7 +93,7 @@ export function renderLuckyAdmin(root, session) {
             <button type="button" class="btn btn-sm btn-ghost" id="lsa-scan-refresh" title="รีเฟรชกล้องและล้างผลลัพธ์เพื่อเริ่มสแกนใหม่">🔄 รีเฟรชสแกนใหม่</button>
           </div>
           <form class="lsa-inline lsa-code-form" id="lsa-code-form">
-            <input class="input" id="lsa-code" placeholder="เช่น K7Q2-M9XA" autocomplete="off" maxlength="20" />
+            <input class="input" id="lsa-code" placeholder="เช่น K7Q2-M9XA" autocomplete="off" autocapitalize="characters" spellcheck="false" maxlength="9" style="font-family:ui-monospace,monospace;letter-spacing:0.08em;font-weight:600" />
             <button type="submit" class="btn btn-sm btn-primary">${icon('search')} ตรวจสอบ</button>
           </form>
           <div class="lsa-claim" id="lsa-claim"></div>
@@ -440,9 +440,15 @@ export function renderLuckyAdmin(root, session) {
     paintClaim();
     if (currentClaim.result === 'invalid') toast('ไม่พบสิทธิ์รับรางวัล', 'err');
   }
+  const codeInput = $('#lsa-code');
+  codeInput.addEventListener('input', () => {
+    const raw = codeInput.value.toUpperCase().replace(/[^A-Z0-9]/g, '').slice(0, 8);
+    const formatted = raw.length > 4 ? `${raw.slice(0, 4)}-${raw.slice(4)}` : raw;
+    if (codeInput.value !== formatted) codeInput.value = formatted;
+  });
   $('#lsa-code-form').addEventListener('submit', e => {
     e.preventDefault();
-    const v = $('#lsa-code').value.trim();
+    const v = codeInput.value.trim();
     if (v) lookup(v);
   });
   $('#lsa-claim').addEventListener('click', async e => {
